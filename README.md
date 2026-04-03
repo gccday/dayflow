@@ -4,7 +4,7 @@
 ```bash
 # Linux 快速安装
 git clone https://github.com/gccday/dayflow.git
-cd dayflow/bin
+cd dayflow
 cp .env.example .env
 export NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 export PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
