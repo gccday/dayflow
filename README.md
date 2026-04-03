@@ -1,5 +1,4 @@
-# 项目名字
-DayFlow
+# DayFlow - A simple GCC check-in script
 
 # 部署命令
 ```bash
