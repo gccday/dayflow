@@ -829,7 +829,7 @@
               </div>
               <div class="space-y-1.5">
                 <label class="block text-sm font-medium text-slate-700">目标链接</label>
-                <input id="editTargetUrl" placeholder="留空使用默认" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                <div class="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-500 shadow-sm">已固定为系统默认签到链接，不支持按账号修改</div>
               </div>
               <div class="space-y-1.5">
                 <label class="block text-sm font-medium text-slate-700">自动签到时间</label>
@@ -854,33 +854,75 @@
           </div>
 
           <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-5">
-            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-map-pin text-primary mr-2"></i>指纹定位</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">纬度</label><input id="editLat" placeholder="latitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary"></div>
-              <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">经度</label><input id="editLng" placeholder="longitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary"></div>
-              <div class="space-y-1.5">
-                <label class="block text-sm font-medium text-slate-700">坐标系</label>
-                <select id="editCoordSystem" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary">
-                  <option value="auto">auto</option><option value="wgs84">wgs84</option><option value="gcj02">gcj02</option><option value="bd09">bd09</option>
-                </select>
+            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-map-pin text-primary mr-2"></i>位置设置</h4>
+
+            <section class="border border-slate-200 rounded-2xl bg-white p-5 shadow-sm">
+              <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h5 class="text-base font-semibold text-slate-800 mb-1">签到提交地址文本</h5>
+                  <p class="text-sm text-slate-500 m-0">这里的文本才会真实提交到签到接口，用于位置认证。</p>
+                </div>
               </div>
-              <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">位置精度 (m)</label><input id="editAccuracy" placeholder="默认30" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary"></div>
-            </div>
-            
-            <details class="mt-4 group">
-              <summary class="cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center"><i class="ph ph-caret-right transition-transform group-open:rotate-90 mr-1"></i>高级参数（可选）</summary>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-5 border-l-2 border-indigo-100">
-                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">高度 (m)</label><input id="editAltitude" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
-                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">高度精度 (m)</label><input id="editAltitudeAccuracy" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
-                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">方向 (0-360)</label><input id="editHeading" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
-                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">速度 (m/s)</label><input id="editSpeed" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
+              <div class="space-y-1.5">
+                <label class="block text-sm font-medium text-slate-700">签到提交地址文本（实际提交到签到接口）</label>
+                <textarea id="editSubmitAddressText" rows="3" placeholder="如：校园南门附近" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></textarea>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <span id="editAddressSource" class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">未填写地址</span>
+              </div>
+              <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-7 text-amber-900">
+                <div>签到位置认证看的是上面的<strong>地址文本</strong>，不是经纬度。</div>
+                <div class="mt-2">请先打开官方小程序，复制签到位置名称，再把省、市、区、街道等前缀删掉，只保留类似<strong>校园南门附近</strong>这种核心名称。</div>
+              </div>
+            </section>
+
+            <details id="editFingerprintDetails" class="mt-4 rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              <summary class="cursor-pointer px-5 py-4 text-sm font-semibold text-slate-800">浏览器指纹模拟伪装（可选）</summary>
+              <div class="border-t border-slate-200 bg-slate-50/60 p-5">
+                <div class="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-7 text-slate-600">
+                  下面这些地图、经纬度、精度和传感器参数只用于浏览器侧模拟，对实际签到提交基本没有作用。签到接口不会提交这些坐标。
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div class="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h5 class="text-base font-semibold text-slate-800 mb-1">模拟参数</h5>
+                      <p class="text-sm text-slate-500 m-0">不填则沿用当前已保存模拟值；如果还没有，就使用系统默认模拟值。</p>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">纬度</label>
+                      <input id="editLat" placeholder="latitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">经度</label>
+                      <input id="editLng" placeholder="longitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">坐标系</label>
+                      <select id="editCoordSystem" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        <option value="auto">auto</option><option value="wgs84">wgs84</option><option value="gcj02">gcj02</option><option value="bd09">bd09</option>
+                      </select>
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">位置精度 (accuracy, m)</label>
+                      <input id="editAccuracy" placeholder="默认 30" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                  </div>
+                  <details class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 overflow-hidden">
+                    <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700">高级参数（可选）</summary>
+                    <div class="border-t border-slate-200 p-4 bg-white">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">高度 (altitude, m)</label><input id="editAltitude" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></div>
+                        <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">高度精度 (altitudeAccuracy, m)</label><input id="editAltitudeAccuracy" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></div>
+                        <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">方向 (heading, 0-360)</label><input id="editHeading" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></div>
+                        <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">速度 (speed, m/s)</label><input id="editSpeed" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></div>
+                      </div>
+                    </div>
+                  </details>
+                </div>
               </div>
             </details>
-            
-            <div class="space-y-1.5 mt-4">
-              <label class="block text-sm font-medium text-slate-700">签到提交地址文本</label>
-              <textarea id="editSubmitAddressText" rows="2" placeholder="可空，建议填写" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary"></textarea>
-            </div>
           </div>
         </div>
         

@@ -31,7 +31,7 @@ MAP_SDK_DEFAULT_COORD_SYSTEM=gcj02
 GIT_GUARD_ENABLED=true
 GIT_GUARD_STRICT=true
 
-DEFAULT_TARGET_URL=https://example.com/s/rollcall
+DEFAULT_TARGET_URL=https://lqpjtq.aliwork.com/s/rollcall?corpid=dingc10c14f113509f69f5bf40eda33b7ba0&ddtab=true
 `;
 
 function writeDefaultEnvFile(filePath) {

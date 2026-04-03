@@ -5,6 +5,7 @@ const { chromium } = require("playwright-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const { isDingLoginPage, ensureRememberLoginChecked } = require("./auth-service");
+const { validateCheckinTargetUrl } = require("../utils/target-url");
 
 // 仅用于“截图二维码”场景，必须优先命中真实二维码图层，避免截到标题/说明容器。
 const QR_CAPTURE_SELECTORS = [
@@ -713,6 +714,20 @@ class WebQrSessionManager {
     }
 
     const authState = this.repo.getAuthStateByUserId(user.id);
+    const targetUrlValidation = validateCheckinTargetUrl(
+      this.config.defaultTargetUrl || user.target_url,
+      {
+        allowEmpty: false
+      }
+    );
+    if (!targetUrlValidation.ok) {
+      this.setSession(session, {
+        status: "failed",
+        message: `${targetUrlValidation.message}；请检查系统默认签到链接配置后重试`,
+        finishedAt: new Date().toISOString()
+      });
+      return;
+    }
     let browser = null;
     let context = null;
     try {
@@ -752,7 +767,7 @@ class WebQrSessionManager {
         }
         route.continue().catch(() => {});
       });
-      await page.goto(user.target_url, {
+      await page.goto(targetUrlValidation.normalizedUrl, {
         waitUntil: "domcontentloaded",
         timeout: this.config.navigationTimeoutMs
       });

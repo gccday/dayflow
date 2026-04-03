@@ -67,6 +67,7 @@ stop_legacy_systemd_service() {
 
 ensure_playwright_chromium() {
   local chromium_path=""
+  local playwright_host="${PLAYWRIGHT_DOWNLOAD_HOST:-}"
   local launch_check='const { chromium } = require("playwright-extra"); (async()=>{ const b = await chromium.launch({ headless: true }); await b.close(); })().catch(()=>process.exit(1));'
   chromium_path="$(
     node -e "try { const { chromium } = require('playwright'); process.stdout.write(chromium.executablePath() || ''); } catch (_error) { process.stdout.write(''); }" 2>/dev/null || true
@@ -78,6 +79,10 @@ ensure_playwright_chromium() {
   echo "[INFO] Playwright Chromium runtime missing or unhealthy. Installing browser..."
   if ! npx playwright install chromium; then
     echo "[WARN] playwright install chromium failed."
+    if [[ -n "$playwright_host" ]]; then
+      echo "[WARN] PLAYWRIGHT_DOWNLOAD_HOST is set to: $playwright_host"
+      echo "[HINT] If the mirror is incomplete or returns 404, unset PLAYWRIGHT_DOWNLOAD_HOST and retry."
+    fi
   fi
 
   if node -e "$launch_check" >/dev/null 2>&1; then
@@ -89,7 +94,13 @@ ensure_playwright_chromium() {
     echo "[WARN] playwright install-deps chromium failed. Trying --with-deps install."
   fi
 
-  npx playwright install --with-deps chromium
+  if ! npx playwright install --with-deps chromium; then
+    if [[ -n "$playwright_host" ]]; then
+      echo "[WARN] PLAYWRIGHT_DOWNLOAD_HOST is set to: $playwright_host"
+      echo "[HINT] If the mirror is incomplete or returns 404, unset PLAYWRIGHT_DOWNLOAD_HOST and retry."
+    fi
+    exit 1
+  fi
 
   if ! node -e "$launch_check" >/dev/null 2>&1; then
     echo "[ERROR] Playwright Chromium still cannot launch after dependency installation."
@@ -119,6 +130,60 @@ ensure_node_modules() {
     echo "[INFO] Installing dependencies..."
     npm install
   fi
+}
+
+get_env_value() {
+  local key="$1"
+  local fallback="${2:-}"
+  if [[ -f ".env" ]]; then
+    local value
+    value="$(grep -E "^${key}=" ".env" | tail -n 1 | cut -d= -f2- || true)"
+    if [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$fallback"
+}
+
+wait_for_http_port() {
+  local port="$1"
+  local label="$2"
+  local timeout_sec="${3:-300}"
+  local start_sec="$SECONDS"
+
+  while (( SECONDS - start_sec < timeout_sec )); do
+    if node -e '
+      const http = require("http");
+      const port = Number(process.argv[1]);
+      const req = http.request(
+        { hostname: "127.0.0.1", port, path: "/", method: "GET", timeout: 2000 },
+        () => process.exit(0)
+      );
+      req.on("error", () => process.exit(1));
+      req.on("timeout", () => {
+        req.destroy();
+        process.exit(1);
+      });
+      req.end();
+    ' "$port" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "[ERROR] Timed out waiting for $label on port $port."
+  return 1
+}
+
+wait_for_service_ready() {
+  local startup_timeout_sec="${STARTUP_TIMEOUT_SEC:-300}"
+  local health_port auth_port
+  health_port="$(get_env_value "HEALTH_PORT" "21787")"
+  auth_port="$(get_env_value "AUTH_HTTP_PORT" "21777")"
+
+  wait_for_http_port "$health_port" "health endpoint" "$startup_timeout_sec"
+  wait_for_http_port "$auth_port" "service page" "$startup_timeout_sec"
 }
 
 prepare_app() {
@@ -165,18 +230,26 @@ install_systemd_service() {
 }
 
 start_via_systemd() {
+  ensure_env_file
   stop_direct
   install_systemd_service
   systemctl restart "$SERVICE_NAME"
-  sleep 1
   if ! systemctl is-active --quiet "$SERVICE_NAME"; then
     echo "[ERROR] systemd service failed to start: $SERVICE_NAME"
     journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
     exit 1
   fi
+  if ! wait_for_service_ready; then
+    echo "[ERROR] systemd service did not become ready: $SERVICE_NAME"
+    journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
+    exit 1
+  fi
+  local health_port auth_port
+  health_port="$(get_env_value "HEALTH_PORT" "21787")"
+  auth_port="$(get_env_value "AUTH_HTTP_PORT" "21777")"
   echo "[OK] Service started by systemd: $SERVICE_NAME"
-  echo "[OK] Service page: http://127.0.0.1:21777"
-  echo "[OK] Health check: curl -i http://127.0.0.1:21787"
+  echo "[OK] Service page: http://127.0.0.1:$auth_port"
+  echo "[OK] Health check: curl -i http://127.0.0.1:$health_port"
   echo "[OK] Logs: journalctl -u $SERVICE_NAME -f"
 }
 
@@ -216,12 +289,14 @@ start_direct() {
   chmod 600 "$PID_FILE" || true
   chmod 600 "$LOG_FILE" || true
 
-  sleep 1
-  if kill -0 "$new_pid" >/dev/null 2>&1; then
+  if kill -0 "$new_pid" >/dev/null 2>&1 && wait_for_service_ready; then
+    local health_port auth_port
+    health_port="$(get_env_value "HEALTH_PORT" "21787")"
+    auth_port="$(get_env_value "AUTH_HTTP_PORT" "21777")"
     echo "[OK] Service started successfully."
     echo "[OK] PID: $new_pid"
-    echo "[OK] Service page: http://127.0.0.1:21777"
-    echo "[OK] Health check: curl -i http://127.0.0.1:21787"
+    echo "[OK] Service page: http://127.0.0.1:$auth_port"
+    echo "[OK] Health check: curl -i http://127.0.0.1:$health_port"
     echo "[OK] Log file: $LOG_FILE"
   else
     echo "[ERROR] Service failed to start. Check logs: $LOG_FILE"

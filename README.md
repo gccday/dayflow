@@ -11,9 +11,8 @@ apt-get install -y git nodejs npm
 git clone https://github.com/gccday/dayflow.git
 cd dayflow
 
-# 国内镜像
+# 国内 npm 镜像
 export NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
-export PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
 
 # 安装依赖
 npm ci --registry="$NPM_CONFIG_REGISTRY"
@@ -23,6 +22,7 @@ npm ci --registry="$NPM_CONFIG_REGISTRY"
 bash ./daily_flow --set-admin-password
 
 # 安装并启动 systemd 服务
+# 脚本会等待健康检查和 Web 端口就绪后再返回成功
 bash ./daily_flow --install-service
 ```
 

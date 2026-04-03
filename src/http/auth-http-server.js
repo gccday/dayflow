@@ -7,6 +7,10 @@ const { hashPassword, verifyPassword } = require("../security/password");
 const { getClientIp } = require("../services/ip-lookup");
 const { listUaProfiles, generateUserAgentByProfile } = require("../services/user-agent");
 const { normalizeCoordSystem } = require("../services/coord-system");
+const { validateCheckinTargetUrl } = require("../utils/target-url");
+
+const DEFAULT_SIMULATED_LATITUDE = 39.908823;
+const DEFAULT_SIMULATED_LONGITUDE = 116.39747;
 
 function truncateText(text, max = 800) {
   if (text === null || text === undefined) {
@@ -103,6 +107,34 @@ function parseRequiredNumberInput(value, fieldName) {
     throw new Error(`invalid number: ${fieldName}`);
   }
   return num;
+}
+
+function resolveLocationCoordinatesInput(body, existingProfile) {
+  const latitudeInput = parseNullableNumberInput(body.latitude, "latitude");
+  const longitudeInput = parseNullableNumberInput(body.longitude, "longitude");
+  const hasLatitude = latitudeInput !== undefined && latitudeInput !== null;
+  const hasLongitude = longitudeInput !== undefined && longitudeInput !== null;
+  if (hasLatitude !== hasLongitude) {
+    throw new Error("latitude and longitude must be both provided");
+  }
+
+  let latitude = latitudeInput;
+  let longitude = longitudeInput;
+  if (!hasLatitude && !hasLongitude) {
+    const existingLatitude = Number(existingProfile && existingProfile.latitude);
+    const existingLongitude = Number(existingProfile && existingProfile.longitude);
+    latitude = Number.isFinite(existingLatitude) ? existingLatitude : DEFAULT_SIMULATED_LATITUDE;
+    longitude = Number.isFinite(existingLongitude) ? existingLongitude : DEFAULT_SIMULATED_LONGITUDE;
+  }
+
+  if (latitude < -90 || latitude > 90) {
+    throw new Error("invalid latitude range");
+  }
+  if (longitude < -180 || longitude > 180) {
+    throw new Error("invalid longitude range");
+  }
+
+  return { latitude, longitude };
 }
 
 function parseNullableNonNegativeIntInput(value, fieldName) {
@@ -1518,6 +1550,12 @@ function createAuthHttpServer({
     if (hasLatitude !== hasLongitude) {
       throw new Error("latitude and longitude must be both provided");
     }
+    const targetUrlValidation = validateCheckinTargetUrl(String(config.defaultTargetUrl || "").trim(), {
+      allowEmpty: false
+    });
+    if (!targetUrlValidation.ok) {
+      throw new Error(targetUrlValidation.message);
+    }
 
     const inserted = repo.insertUser({
       user_key: userKey,
@@ -1527,7 +1565,7 @@ function createAuthHttpServer({
         body.debugMode === undefined ? 0 : (parseBooleanInput(body.debugMode, "debugMode") ? 1 : 0),
       cron_expr: String(body.cronExpr || "0 0 8 * * *").trim(),
       timezone: String(body.timezone || config.defaultTimezone || "Asia/Shanghai").trim(),
-      target_url: String(body.targetUrl || config.defaultTargetUrl || "").trim(),
+      target_url: targetUrlValidation.normalizedUrl,
       user_agent: generatedUserAgent,
       checkin_button_text: String(
         body.checkinButtonText || config.defaultCheckinButtonText || "立即签到"
@@ -2911,6 +2949,13 @@ function createAuthHttpServer({
         }
       }
 
+      const targetUrlValidation = validateCheckinTargetUrl(String(config.defaultTargetUrl || "").trim(), {
+        allowEmpty: false
+      });
+      if (!targetUrlValidation.ok) {
+        throw new Error(targetUrlValidation.message);
+      }
+
       repo.updateCheckinUserBase({
         id,
         display_name:
@@ -2928,10 +2973,7 @@ function createAuthHttpServer({
           body.timezone === undefined
             ? existing.timezone
             : String(body.timezone || "").trim() || existing.timezone,
-        target_url:
-          body.targetUrl === undefined
-            ? existing.target_url
-            : String(body.targetUrl || "").trim() || existing.target_url,
+        target_url: targetUrlValidation.normalizedUrl,
         user_agent:
           body.userAgent === undefined
             ? existing.user_agent
@@ -3002,8 +3044,7 @@ function createAuthHttpServer({
         return;
       }
       const body = req.body || {};
-      const latitude = parseRequiredNumberInput(body.latitude, "latitude");
-      const longitude = parseRequiredNumberInput(body.longitude, "longitude");
+      const { latitude, longitude } = resolveLocationCoordinatesInput(body, existing && repo.getDefaultLocationProfile(id));
       const accuracy = parseNullableNumberInput(body.accuracy, "accuracy");
       const altitude = parseNullableNumberInput(body.altitude, "altitude");
       const altitudeAccuracy = parseNullableNumberInput(body.altitudeAccuracy, "altitudeAccuracy");
@@ -3845,8 +3886,8 @@ function createAuthHttpServer({
         return;
       }
       const body = req.body || {};
-      const latitude = parseRequiredNumberInput(body.latitude, "latitude");
-      const longitude = parseRequiredNumberInput(body.longitude, "longitude");
+      const existingProfile = repo.getDefaultLocationProfile(checkinUserId);
+      const { latitude, longitude } = resolveLocationCoordinatesInput(body, existingProfile);
       const accuracy = parseNullableNumberInput(body.accuracy, "accuracy");
       const altitude = parseNullableNumberInput(body.altitude, "altitude");
       const altitudeAccuracy = parseNullableNumberInput(body.altitudeAccuracy, "altitudeAccuracy");
@@ -3875,7 +3916,6 @@ function createAuthHttpServer({
           );
         }
       }
-      const existingProfile = repo.getDefaultLocationProfile(checkinUserId);
       const coordSystem = parseCoordSystemInput(
         body.coordSystem,
         existingProfile && existingProfile.coord_system ? existingProfile.coord_system : "auto"

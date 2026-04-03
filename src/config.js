@@ -3,6 +3,9 @@ const path = require("path");
 const dotenv = require("dotenv");
 const { generateUserAgentByProfile } = require("./services/user-agent");
 
+const BUILTIN_DEFAULT_TARGET_URL =
+  "https://lqpjtq.aliwork.com/s/rollcall?corpid=dingc10c14f113509f69f5bf40eda33b7ba0&ddtab=true";
+
 const envPath = path.resolve(process.cwd(), ".env");
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
@@ -25,6 +28,14 @@ function getNumber(name, fallback) {
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getString(name, fallback = "") {
+  const raw = process.env[name];
+  if (raw === undefined || raw === null) {
+    return fallback;
+  }
+  return String(raw);
 }
 
 const config = {
@@ -62,9 +73,7 @@ const config = {
     .toLowerCase(),
   gitGuardEnabled: getBoolean("GIT_GUARD_ENABLED", true),
   gitGuardStrict: getBoolean("GIT_GUARD_STRICT", true),
-  defaultTargetUrl:
-    process.env.DEFAULT_TARGET_URL ||
-    "https://example.com/s/rollcall",
+  defaultTargetUrl: getString("DEFAULT_TARGET_URL", BUILTIN_DEFAULT_TARGET_URL).trim(),
   defaultCheckinButtonText: "立即签到",
   defaultSignedMarkerText: "今日已签到",
   defaultLocationRefreshText: "重新定位"

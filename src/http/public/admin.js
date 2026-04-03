@@ -54,6 +54,8 @@
   const editMappingList = $("editMappingList");
   const editNotifyChannelId = $("editNotifyChannelId");
   const editNotifyChannelHint = $("editNotifyChannelHint");
+  const editAddressSource = $("editAddressSource");
+  const editFingerprintDetails = $("editFingerprintDetails");
   const btnSaveRegistrationSettings = $("btnSaveRegistrationSettings");
   const inviteCodesTableBody = document.querySelector("#inviteCodesTable tbody");
   const faqAccordions = Array.from(document.querySelectorAll("#panel-faq details.faq-accordion"));
@@ -1419,6 +1421,35 @@
     return next;
   }
 
+  function getSimulationCenterFromProfile(profile) {
+    const centerLng = Number(profile && profile.longitude);
+    const centerLat = Number(profile && profile.latitude);
+    if (Number.isFinite(centerLng) && Number.isFinite(centerLat)) {
+      return { lat: centerLat, lng: centerLng };
+    }
+    return { lat: 39.908823, lng: 116.39747 };
+  }
+
+  function getOptionalSimulationDefaults(profile) {
+    const p = profile || {};
+    const center = getSimulationCenterFromProfile(p);
+    let coordSystem = "wgs84";
+    try {
+      coordSystem = normalizeCoordSystemInput(p.coordSystem || "wgs84");
+    } catch (_error) {
+      coordSystem = "wgs84";
+    }
+    return {
+      latitude: center.lat,
+      longitude: center.lng,
+      coordSystem,
+      accuracy:
+        Number.isFinite(Number(p.accuracy)) && Number(p.accuracy) >= 0
+          ? Number(p.accuracy)
+          : 30
+    };
+  }
+
   function renderCheckinEditCookieSummary(checkinUser) {
     if (!editCookieSummary) {
       return;
@@ -1489,6 +1520,7 @@
   function fillCheckinEditModal(checkinUser) {
     const user = checkinUser || {};
     const profile = user.locationProfile || {};
+    const defaults = getOptionalSimulationDefaults(profile);
     checkinEditTargetUserId = Number(user.id) || null;
     if (checkinEditHint) {
       checkinEditHint.textContent =
@@ -1501,26 +1533,36 @@
         AUTO_CHECKIN_JITTER_HINT;
     }
     $("editDisplayName").value = String(user.displayName || "");
-    $("editTargetUrl").value = String(user.targetUrl || "");
     const timeLabel = String(parseCronToTimeLabel(user.cronExpr || "") || "");
     $("editCheckinTime").value = /^\d{2}:\d{2}$/.test(timeLabel) ? timeLabel : "08:00";
     $("editWarningTime").value = String(user.warningTime || "23:00");
     $("editEnabled").checked = Boolean(user.enabled);
     $("editDebugMode").checked = Boolean(user.debugMode);
 
-    $("editLat").value = profile.latitude ?? "";
-    $("editLng").value = profile.longitude ?? "";
-    $("editAccuracy").value = profile.accuracy ?? 30;
+    $("editLat").value = Number(defaults.latitude).toFixed(7);
+    $("editLng").value = Number(defaults.longitude).toFixed(7);
+    $("editAccuracy").value = defaults.accuracy;
     try {
-      $("editCoordSystem").value = normalizeCoordSystemInput(profile.coordSystem || "auto");
+      $("editCoordSystem").value = defaults.coordSystem;
     } catch (_error) {
-      $("editCoordSystem").value = "auto";
+      $("editCoordSystem").value = "wgs84";
     }
     $("editAltitude").value = profile.altitude ?? "";
     $("editAltitudeAccuracy").value = profile.altitudeAccuracy ?? "";
     $("editHeading").value = profile.heading ?? "";
     $("editSpeed").value = profile.speed ?? "";
     $("editSubmitAddressText").value = profile.submitAddressText || "";
+    if (editAddressSource) {
+      const source = String(profile.submitAddressSource || "").trim();
+      const updatedAt = String(profile.submitAddressUpdatedAt || "").trim();
+      editAddressSource.textContent =
+        !source && !updatedAt
+          ? "未填写地址"
+          : `来源: ${source || "-"}${updatedAt ? ` | ${updatedAt}` : ""}`;
+    }
+    if (editFingerprintDetails) {
+      editFingerprintDetails.open = false;
+    }
     $("editBindAppUserId").value = "";
     renderCheckinEditCookieSummary(user);
     renderCheckinEditMappings(user);
@@ -1548,6 +1590,9 @@
       return;
     }
     checkinEditTargetUserId = null;
+    if (editFingerprintDetails) {
+      editFingerprintDetails.open = false;
+    }
     checkinEditModal.classList.add("hidden");
     document.body.classList.toggle("sidebar-open", Boolean(sidebar && sidebar.classList.contains("open")));
   }
@@ -1567,7 +1612,6 @@
   function buildCheckinEditBasicPayload() {
     return {
       displayName: $("editDisplayName").value.trim(),
-      targetUrl: $("editTargetUrl").value.trim() || null,
       cronExpr: timeToCronExpr($("editCheckinTime").value),
       timezone: "Asia/Shanghai",
       warningTime: $("editWarningTime").value.trim() || "23:00",
@@ -1581,38 +1625,53 @@
   }
 
   function buildCheckinEditLocationPayloadOrNull() {
+    const targetUser = findCheckinUserById(checkinEditTargetUserId);
+    const existingProfile =
+      targetUser && targetUser.locationProfile ? targetUser.locationProfile : {};
+    const defaults = getOptionalSimulationDefaults(existingProfile);
     const rawLatitude = String($("editLat").value ?? "").trim();
     const rawLongitude = String($("editLng").value ?? "").trim();
-    const hasLatitude = rawLatitude.length > 0;
-    const hasLongitude = rawLongitude.length > 0;
-    if (!hasLatitude && !hasLongitude) {
-      return null;
+    let latitude = parseOptionalNumberInput(rawLatitude, "纬度");
+    let longitude = parseOptionalNumberInput(rawLongitude, "经度");
+    if ((latitude === null) !== (longitude === null)) {
+      throw new Error("纬度和经度需要同时填写，或都留空使用默认模拟值");
     }
-    if (hasLatitude !== hasLongitude) {
-      throw new Error("经纬度需要同时填写或同时留空");
+    if (latitude === null && longitude === null) {
+      latitude = defaults.latitude;
+      longitude = defaults.longitude;
     }
-    const latitude = Number(rawLatitude);
-    const longitude = Number(rawLongitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      throw new Error("请输入有效经纬度");
+    if (latitude < -90 || latitude > 90) {
+      throw new Error("纬度范围必须在 -90 到 90");
     }
-    const accuracy = parseOptionalNumberInput($("editAccuracy").value, "位置精度", { min: 0 });
+    if (longitude < -180 || longitude > 180) {
+      throw new Error("经度范围必须在 -180 到 180");
+    }
+    const accuracyInput = parseOptionalNumberInput($("editAccuracy").value, "位置精度", { min: 0 });
+    const accuracy = accuracyInput === null ? defaults.accuracy : accuracyInput;
     const altitude = parseOptionalNumberInput($("editAltitude").value, "高度");
     const altitudeAccuracy = parseOptionalNumberInput($("editAltitudeAccuracy").value, "高度精度", {
       min: 0
     });
     const heading = parseOptionalNumberInput($("editHeading").value, "方向", { min: 0, max: 360 });
     const speed = parseOptionalNumberInput($("editSpeed").value, "速度", { min: 0 });
+    const submitAddressText = String($("editSubmitAddressText").value || "").trim();
+    if (!submitAddressText) {
+      throw new Error("请手动填写提交地址文本");
+    }
     return {
       latitude,
       longitude,
-      coordSystem: normalizeCoordSystemInput($("editCoordSystem").value),
+      coordSystem: normalizeCoordSystemInput(
+        $("editCoordSystem").value || defaults.coordSystem
+      ),
       accuracy,
       altitude,
       altitudeAccuracy,
       heading,
       speed,
-      submitAddressText: String($("editSubmitAddressText").value || "").trim() || null
+      submitAddressText,
+      submitAddressSource: "manual-input",
+      submitAddressRawJson: null
     };
   }
 
@@ -3171,7 +3230,7 @@
               });
             }
             await loadAll();
-            showMessage(locationPayload ? "设置已保存" : "设置已保存（未填写定位，已跳过定位保存）", false);
+            showMessage("设置已保存", false);
           } catch (error) {
             showMessage("保存设置失败: " + error.message, true);
           }

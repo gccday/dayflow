@@ -4,6 +4,7 @@ const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const { ensureAuthenticated, isDingLoginPage } = require("../services/auth-service");
 const { simulateLocation } = require("../services/location-simulator");
 const { getDateInTz, getTimeInTz } = require("../utils/time");
+const { validateCheckinTargetUrl } = require("../utils/target-url");
 
 chromium.use(StealthPlugin());
 
@@ -17,6 +18,19 @@ function truncateText(text, max = 1200) {
   }
   const raw = String(text);
   return raw.length > max ? `${raw.slice(0, max)}...` : raw;
+}
+
+function resolveValidatedTargetUrl(user, config) {
+  const result = validateCheckinTargetUrl(
+    (config && config.defaultTargetUrl) || (user && user.target_url),
+    {
+      allowEmpty: false
+    }
+  );
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
+  return result.normalizedUrl;
 }
 
 const DEFAULT_ROLLCALL_PROFILE = Object.freeze({
@@ -502,6 +516,7 @@ class CheckinWorker {
   }
 
   async runWithBrowser(user, authState, simulated, options = {}) {
+    const targetUrl = resolveValidatedTargetUrl(user, this.config);
     let browser = null;
     let context = null;
     try {
@@ -539,7 +554,7 @@ class CheckinWorker {
       const schemaCapture = this.createSchemaCapture(page);
       let result = null;
       try {
-        await page.goto(user.target_url, {
+        await page.goto(targetUrl, {
           waitUntil: "domcontentloaded",
           timeout: this.config.navigationTimeoutMs
         });
@@ -555,7 +570,7 @@ class CheckinWorker {
           logger: this.logger
         });
 
-        await page.goto(user.target_url, {
+        await page.goto(targetUrl, {
           waitUntil: "domcontentloaded",
           timeout: this.config.navigationTimeoutMs
         });
@@ -596,6 +611,21 @@ class CheckinWorker {
   async checkCookieStatus(user, options = {}) {
     if (!user || !user.id) {
       throw new Error("invalid user");
+    }
+    let targetUrl = "";
+    try {
+      targetUrl = resolveValidatedTargetUrl(user, this.config);
+    } catch (error) {
+      return {
+        ok: false,
+        status: "target_url_invalid",
+        message: truncateText(error.message || "签到链接无效", 200),
+        finalUrl: "",
+        pageTitle: "",
+        httpStatus: null,
+        checkedAt: new Date().toISOString(),
+        hasCorpUserCookie: false
+      };
     }
     const notifyOnInvalid = Boolean(options.notifyOnInvalid);
     const notifyTitle = String(options.notifyTitle || "请重新扫码登录");
@@ -658,7 +688,7 @@ class CheckinWorker {
       }
       context = await browser.newContext(contextOptions);
       const page = await context.newPage();
-      const response = await page.goto(user.target_url, {
+      const response = await page.goto(targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: this.config.navigationTimeoutMs
       });
@@ -748,6 +778,17 @@ class CheckinWorker {
     if (!user || !user.id) {
       throw new Error("invalid user");
     }
+    let targetUrl = "";
+    try {
+      targetUrl = resolveValidatedTargetUrl(user, this.config);
+    } catch (error) {
+      return {
+        ok: false,
+        status: "target_url_invalid",
+        message: truncateText(error.message || "签到链接无效", 200),
+        checkedAt: new Date().toISOString()
+      };
+    }
     const tz = user.timezone || this.config.defaultTimezone || "Asia/Shanghai";
     const authState = this.repo.getAuthStateByUserId(user.id);
     if (!authState || !authState.storage_state_json) {
@@ -789,7 +830,7 @@ class CheckinWorker {
       context = await browser.newContext(contextOptions);
       const page = await context.newPage();
       schemaCapture = this.createSchemaCapture(page);
-      const response = await page.goto(user.target_url, {
+      const response = await page.goto(targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: this.config.navigationTimeoutMs
       });
