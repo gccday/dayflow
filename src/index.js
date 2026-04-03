@@ -16,6 +16,7 @@ const { runStartupGitGuard, installPreCommitHook } = require("./security/git-gua
 const { hashPassword } = require("./security/password");
 const { createMonitorServer } = require("./health/monitor-server");
 const { promptHidden } = require("./utils/secure-prompt");
+const { writeDefaultEnvFile } = require("./default-env-template");
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -155,7 +156,12 @@ async function main() {
   if (hasFlag("--set-admin-password")) {
     const envPath = config.envPath || path.resolve(process.cwd(), ".env");
     if (!fs.existsSync(envPath)) {
-      fs.copyFileSync(path.resolve(process.cwd(), ".env.example"), envPath);
+      const envExamplePath = path.resolve(process.cwd(), ".env.example");
+      if (fs.existsSync(envExamplePath)) {
+        fs.copyFileSync(envExamplePath, envPath);
+      } else {
+        writeDefaultEnvFile(envPath);
+      }
       try {
         fs.chmodSync(envPath, 0o600);
       } catch (_error) {

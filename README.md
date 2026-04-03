@@ -18,6 +18,7 @@ export PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
 # 安装依赖
 npm ci --registry="$NPM_CONFIG_REGISTRY"
 
+# 首次运行会自动生成 `.env`
 # 设置管理员密码（隐藏输入，自动写入 Argon2 哈希）
 bash ./daily_flow --set-admin-password
 
