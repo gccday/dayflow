@@ -2,7 +2,7 @@
 
 # 部署命令
 ```bash
-# Linux 快速安装（国内优化 + 自定义管理员密码 + systemd 守护）
+# Linux 快速安装
 git clone https://github.com/gccday/dayflow.git
 cd dayflow/bin
 cp .env.example .env
@@ -15,7 +15,7 @@ npm ci --registry="$NPM_CONFIG_REGISTRY"
 ```
 
 ```bash
-# SSH 终端运维命令（启动 / 关闭 / 状态 / 修改管理员密码）
+# SSH 终端运维命令
 cd /opt/dayflow/bin
 ./daily_flow start
 ./daily_flow stop
