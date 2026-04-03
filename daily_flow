@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "[ERROR] This script only supports Linux."
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+MODE="${1:-start}"
+
+RUNTIME_DIR="$SCRIPT_DIR/.runtime"
+PID_FILE="$RUNTIME_DIR/daily_flow.pid"
+LOG_FILE="$RUNTIME_DIR/daily_flow.log"
+SERVICE_NAME="dayflow.service"
+LEGACY_SERVICE_NAME="daily-flow.service"
+SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
+mkdir -p "$RUNTIME_DIR"
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[ERROR] node is not installed."
+  exit 1
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "[ERROR] npm is not installed."
+  exit 1
+fi
+
+is_systemd_available() {
+  command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]
+}
+
+can_manage_systemd() {
+  is_systemd_available && [[ "${EUID:-$(id -u)}" -eq 0 ]]
+}
+
+has_systemd_unit() {
+  local unit_name="$1"
+  [[ -n "$unit_name" ]] || return 1
+  if systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '{print $1}' | grep -Fxq "$unit_name"; then
+    return 0
+  fi
+  [[ -f "/etc/systemd/system/$unit_name" ]]
+}
+
+stop_legacy_systemd_service() {
+  if ! can_manage_systemd; then
+    return 0
+  fi
+  if [[ "$LEGACY_SERVICE_NAME" == "$SERVICE_NAME" ]]; then
+    return 0
+  fi
+  if ! has_systemd_unit "$LEGACY_SERVICE_NAME"; then
+    return 0
+  fi
+  systemctl stop "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+  systemctl disable "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+  systemctl reset-failed "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+  echo "[INFO] Stopped and disabled legacy service: $LEGACY_SERVICE_NAME"
+}
+
+ensure_playwright_chromium() {
+  local chromium_path=""
+  local launch_check='const { chromium } = require("playwright-extra"); (async()=>{ const b = await chromium.launch({ headless: true }); await b.close(); })().catch(()=>process.exit(1));'
+  chromium_path="$(
+    node -e "try { const { chromium } = require('playwright'); process.stdout.write(chromium.executablePath() || ''); } catch (_error) { process.stdout.write(''); }" 2>/dev/null || true
+  )"
+  if [[ -n "$chromium_path" && -x "$chromium_path" ]] && node -e "$launch_check" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "[INFO] Playwright Chromium runtime missing or unhealthy. Installing browser..."
+  if ! npx playwright install chromium; then
+    echo "[WARN] playwright install chromium failed."
+  fi
+
+  if node -e "$launch_check" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "[INFO] Installing Playwright system dependencies..."
+  if ! npx playwright install-deps chromium; then
+    echo "[WARN] playwright install-deps chromium failed. Trying --with-deps install."
+  fi
+
+  npx playwright install --with-deps chromium
+
+  if ! node -e "$launch_check" >/dev/null 2>&1; then
+    echo "[ERROR] Playwright Chromium still cannot launch after dependency installation."
+    exit 1
+  fi
+}
+
+ensure_env_file() {
+  if [[ ! -f ".env" ]]; then
+    cp ".env.example" ".env"
+    echo "[INFO] .env not found. Created from .env.example."
+  fi
+  chmod 600 ".env" || true
+}
+
+ensure_node_modules() {
+  if [[ ! -d "node_modules" ]]; then
+    echo "[INFO] Installing dependencies..."
+    npm install
+  fi
+}
+
+prepare_app() {
+  ensure_env_file
+  ensure_node_modules
+  ensure_playwright_chromium
+  echo "[INFO] Initializing database..."
+  npm run db:init
+}
+
+render_service_file() {
+  cat >"$SERVICE_FILE" <<EOF
+[Unit]
+Description=DayFlow Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/env bash $SCRIPT_DIR/daily_flow --run-service
+Restart=always
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+StandardOutput=append:$LOG_FILE
+StandardError=append:$LOG_FILE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+install_systemd_service() {
+  if ! can_manage_systemd; then
+    echo "[ERROR] systemd management requires root and a systemd host."
+    exit 1
+  fi
+  stop_legacy_systemd_service
+  render_service_file
+  systemctl daemon-reload
+  systemctl enable "$SERVICE_NAME" >/dev/null
+  echo "[OK] systemd service installed and enabled: $SERVICE_NAME"
+}
+
+start_via_systemd() {
+  stop_direct
+  install_systemd_service
+  systemctl restart "$SERVICE_NAME"
+  sleep 1
+  if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+    echo "[ERROR] systemd service failed to start: $SERVICE_NAME"
+    journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
+    exit 1
+  fi
+  echo "[OK] Service started by systemd: $SERVICE_NAME"
+  echo "[OK] Service page: http://127.0.0.1:21777"
+  echo "[OK] Health check: curl -i http://127.0.0.1:21787"
+  echo "[OK] Logs: journalctl -u $SERVICE_NAME -f"
+}
+
+stop_direct() {
+  if [[ -f "$PID_FILE" ]]; then
+    local old_pid
+    old_pid="$(cat "$PID_FILE" || true)"
+    if [[ -n "${old_pid:-}" ]] && kill -0 "$old_pid" >/dev/null 2>&1; then
+      kill "$old_pid" >/dev/null 2>&1 || true
+      sleep 1
+    fi
+    rm -f "$PID_FILE"
+  fi
+  pkill -f "node src/index.js" >/dev/null 2>&1 || true
+}
+
+start_direct() {
+  ensure_env_file
+  if [[ -f "$PID_FILE" ]]; then
+    local old_pid
+    old_pid="$(cat "$PID_FILE" || true)"
+    if [[ -n "${old_pid:-}" ]] && kill -0 "$old_pid" >/dev/null 2>&1; then
+      echo "[INFO] Service is already running. PID=$old_pid"
+      echo "[INFO] Log file: $LOG_FILE"
+      exit 0
+    fi
+    rm -f "$PID_FILE"
+  fi
+
+  prepare_app
+
+  echo "[INFO] Starting service..."
+  nohup npm start >>"$LOG_FILE" 2>&1 &
+  local new_pid
+  new_pid=$!
+  echo "$new_pid" >"$PID_FILE"
+  chmod 600 "$PID_FILE" || true
+  chmod 600 "$LOG_FILE" || true
+
+  sleep 1
+  if kill -0 "$new_pid" >/dev/null 2>&1; then
+    echo "[OK] Service started successfully."
+    echo "[OK] PID: $new_pid"
+    echo "[OK] Service page: http://127.0.0.1:21777"
+    echo "[OK] Health check: curl -i http://127.0.0.1:21787"
+    echo "[OK] Log file: $LOG_FILE"
+  else
+    echo "[ERROR] Service failed to start. Check logs: $LOG_FILE"
+    exit 1
+  fi
+}
+
+show_status() {
+  if can_manage_systemd && has_systemd_unit "$SERVICE_NAME"; then
+    systemctl --no-pager --full status "$SERVICE_NAME" | sed -n '1,18p' || true
+    if [[ "$LEGACY_SERVICE_NAME" != "$SERVICE_NAME" ]] && has_systemd_unit "$LEGACY_SERVICE_NAME"; then
+      echo "[INFO] legacy service status: $LEGACY_SERVICE_NAME"
+      systemctl --no-pager --full status "$LEGACY_SERVICE_NAME" | sed -n '1,8p' || true
+    fi
+  else
+    if [[ -f "$PID_FILE" ]]; then
+      local old_pid
+      old_pid="$(cat "$PID_FILE" || true)"
+      if [[ -n "${old_pid:-}" ]] && kill -0 "$old_pid" >/dev/null 2>&1; then
+        echo "[OK] Running in direct mode. PID=$old_pid"
+      else
+        echo "[WARN] PID file exists but process is not running."
+      fi
+    else
+      echo "[WARN] Service is not running in direct mode."
+    fi
+  fi
+  curl -s -o /dev/null -w "[INFO] health=%{http_code}\n" http://127.0.0.1:21787 || true
+}
+
+if [[ "$MODE" == "--run-service" ]]; then
+  prepare_app
+  exec npm start
+fi
+
+if [[ "$MODE" == "--set-admin-password" ]]; then
+  ensure_env_file
+  ensure_node_modules
+  echo "[INFO] Set admin password (input will be hidden)..."
+  npm run set-admin-password
+  echo "[OK] Admin password updated safely."
+  exit 0
+fi
+
+if [[ "$MODE" == "--help" || "$MODE" == "-h" ]]; then
+  cat <<'EOF'
+Usage:
+  ./daily_flow                 # one-click start (systemd preferred)
+  ./daily_flow start
+  ./daily_flow stop
+  ./daily_flow restart
+  ./daily_flow status
+  ./daily_flow --install-service
+  ./daily_flow --set-admin-password
+
+Notes:
+  - Linux only
+  - Admin password input is hidden and stored as Argon2id hash in .env
+  - If systemd is available and running as root, this script uses systemd by default
+EOF
+  exit 0
+fi
+
+case "$MODE" in
+  start)
+    if can_manage_systemd; then
+      start_via_systemd
+    else
+      start_direct
+    fi
+    ;;
+  --install-service)
+    start_via_systemd
+    ;;
+  stop)
+    if can_manage_systemd && has_systemd_unit "$SERVICE_NAME"; then
+      systemctl stop "$SERVICE_NAME"
+      echo "[OK] Stopped systemd service: $SERVICE_NAME"
+      if [[ "$LEGACY_SERVICE_NAME" != "$SERVICE_NAME" ]] && has_systemd_unit "$LEGACY_SERVICE_NAME"; then
+        systemctl stop "$LEGACY_SERVICE_NAME" >/dev/null 2>&1 || true
+        echo "[INFO] Stopped legacy systemd service: $LEGACY_SERVICE_NAME"
+      fi
+    else
+      stop_direct
+      echo "[OK] Stopped direct-mode service."
+    fi
+    ;;
+  restart)
+    if can_manage_systemd; then
+      start_via_systemd
+    else
+      stop_direct
+      start_direct
+    fi
+    ;;
+  status)
+    show_status
+    ;;
+  *)
+    echo "[ERROR] Unknown mode: $MODE"
+    echo "Use --help for usage."
+    exit 1
+    ;;
+esac

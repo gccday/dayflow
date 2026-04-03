@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DayFlow 管理控制台</title>
+  
+  <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('adminDashboard', () => ({
+            isCreateUserOpen: true,
+            isCreateGroupOpen: true,
+            isCreateCheckinOpen: true,
+            isUserMenuOpen: true,
+        }))
+    })
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            primaryHover: '#4338ca',
+            brand: {
+              50: "#eff6ff",
+              100: "#dbeafe",
+              500: "#3b82f6",
+              600: "#2563eb"
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <link rel="stylesheet" href="/web/assets/style.css">
+
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    [x-cloak] { display: none !important; }
+
+    /* Override style.css variables to match template */
+    :root {
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-weak: rgba(79, 70, 229, 0.12);
+    }
+
+    /* Override legacy style.css leaking into the sidebar */
+    #adminSidebar button {
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent;
+    }
+    #adminSidebar .menu-item {
+      padding: 0.5rem 0.75rem !important; /* Tailwind py-2 px-3 */
+      border: none !important;
+    }
+    #adminSidebar .menu-sub-item {
+      gap: 0.5rem !important;
+      padding-left: 0.625rem !important;
+    }
+    #adminSidebar .menu-sub-item i {
+      margin-right: 0.125rem !important;
+      flex: 0 0 auto;
+    }
+    #adminSidebar .menu-item.active {
+      background-color: #eef2ff !important; /* bg-indigo-50 */
+      color: var(--accent) !important;
+      font-weight: 500 !important;
+      box-shadow: none !important;
+    }
+    #adminSidebar .menu-item:not(.active):hover, #adminSidebar button:hover {
+      background-color: #f8fafc !important; /* bg-slate-50 */
+      color: #0f172a !important;
+    }
+    /* keep switch labels from legacy stylesheet */
+    label.inline-flex {
+      display: inline-flex !important;
+      margin-bottom: 0 !important;
+    }
+    .faq-accordion summary::-webkit-details-marker {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased" x-data="adminDashboard()">
+
+  <div id="globalMsg" class="msg floating-msg hidden"></div>
+
+  <div class="dashboard-shell flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside id="adminSidebar" class="sidebar bg-white border-r border-slate-200 flex flex-col transition-all duration-300 z-20">
+      <div class="h-16 flex items-center px-6 border-b border-slate-100 shrink-0">
+        <i class="ph-fill ph-infinity text-primary text-2xl mr-3"></i>
+        <span class="text-lg font-bold text-slate-900 tracking-tight">DayFlow</span>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto no-scrollbar py-4 px-3 space-y-1 menu-list">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">菜单导航</div>
+
+        <button class="menu-item active w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50" data-menu-target="panel-overview">
+          <i class="ph ph-house text-lg mr-3 text-slate-500"></i>主页总览
+        </button>
+        
+        <div class="space-y-1 menu-group">
+          <button class="w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg text-slate-700 hover:bg-slate-50 transition-colors menu-group-toggle expanded" data-menu-group="user" type="button" aria-expanded="true">
+            <div class="flex items-center">
+              <i class="ph ph-users text-lg mr-3 text-slate-500"></i>
+              <span>用户管理</span>
+            </div>
+            <i class="ph ph-caret-down transition-transform duration-200 menu-group-arrow"></i>
+          </button>
+          
+          <!-- admin.js uses .menu-sub-list.open to toggle visibility -->
+          <div class="menu-sub-list open" data-menu-sub-list="user">
+            <div class="pt-1 pb-2 space-y-1 pl-4 pr-2">
+              <button class="menu-item menu-sub-item w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-slate-50 flex items-center gap-2" data-menu-target="panel-users">
+                <i class="ph ph-user text-base text-slate-500"></i>用户
+              </button>
+              <button class="menu-item menu-sub-item w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-slate-50 flex items-center gap-2" data-menu-target="panel-groups">
+                <i class="ph ph-users-three text-base text-slate-500"></i>用户组
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button class="menu-item w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50" data-menu-target="panel-checkin">
+          <i class="ph ph-calendar-check text-lg mr-3 text-slate-500"></i>签到账号管理
+        </button>
+
+        <button class="menu-item w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50" data-menu-target="panel-admin-notify">
+          <i class="ph ph-bell-ringing text-lg mr-3 text-slate-500"></i>推送通道
+        </button>
+
+        <button class="menu-item w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50" data-menu-target="panel-faq">
+          <i class="ph ph-question text-lg mr-3 text-slate-500"></i>常见问题
+        </button>
+      </nav>
+      
+      <div class="p-4 border-t border-slate-100 flex items-center shrink-0">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">A</div>
+        <div class="ml-3">
+          <p id="currentUser" class="text-sm font-medium text-slate-900">-</p>
+          <p class="text-xs text-slate-500">管理员</p>
+        </div>
+      </div>
+    </aside>
+
+    <div id="adminSidebarBackdrop" class="sidebar-backdrop"></div>
+
+    <div class="flex-1 flex flex-col h-screen overflow-hidden relative content-area">
+      <!-- Header -->
+      <header class="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 z-10 shrink-0 sticky top-0">
+        <div class="flex items-center">
+          <button id="btnMenuToggle" class="sidebar-toggle mr-4 p-2 text-slate-500 hover:bg-slate-100 rounded-lg" type="button" aria-label="切换菜单" aria-controls="adminSidebar" aria-expanded="false">
+            <i class="ph ph-list text-xl"></i>
+          </button>
+          <h1 class="text-xl font-bold text-slate-800 tracking-tight">管理控制台</h1>
+        </div>
+        
+        <div id="adminHeaderActions" class="flex items-center gap-3">
+          <div id="adminDevSettingWrap" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50">
+            <button id="btnSystemSettings" type="button" class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 px-2 py-1 rounded-md border border-slate-200 bg-white hover:bg-slate-100 transition-colors" title="打开系统设置入口" aria-label="打开系统设置入口">
+              <i class="ph ph-gear text-sm"></i><span>系统设置</span>
+            </button>
+            <label id="adminDebugWrap" class="flex items-center cursor-pointer select-none text-sm text-slate-600 gap-2" title="开发调试开关，仅影响执行流程">
+              <span class="relative inline-flex items-center">
+                <input id="debugModeToggle" type="checkbox" class="peer sr-only" role="switch" aria-label="切换调试模式">
+                <span class="h-6 w-11 rounded-full bg-slate-300 transition-colors peer-checked:bg-primary"></span>
+                <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform peer-checked:translate-x-5"></span>
+              </span>
+              <span id="debugModeLabel">调试模式：关闭</span>
+            </label>
+          </div>
+          <button id="btnRefresh" class="px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center gap-1.5" title="刷新当前面板" aria-label="刷新当前面板">
+            <i class="ph ph-arrows-clockwise text-xl"></i><span class="hidden md:inline">刷新当前</span>
+          </button>
+          <button id="btnLogout" class="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100 flex items-center" title="退出登录" aria-label="退出登录"><i class="ph ph-sign-out mr-1"></i>退出登录</button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-6">
+        <div class="max-w-7xl mx-auto space-y-6">
+
+          <!-- #panel-overview -->
+          <section id="panel-overview" class="section-panel active">
+            <div class="space-y-6">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-gauge text-primary mr-2"></i>全局总览</h2>
+                  <p class="text-sm text-slate-500 mt-1">管理员可在此查看全局运行统计。</p>
+                </div>
+                <div class="p-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div class="text-sm text-slate-500 flex items-center gap-2"><i class="ph ph-users"></i><span>总用户</span></div>
+                      <div id="overviewTotalUsers" class="mt-2 text-2xl font-semibold text-slate-900">-</div>
+                      <div id="overviewTotalUsersHint" class="mt-1 text-xs text-slate-500">-</div>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div class="text-sm text-slate-500 flex items-center gap-2"><i class="ph ph-calendar-check"></i><span>总签到账户</span></div>
+                      <div id="overviewTotalCheckinAccounts" class="mt-2 text-2xl font-semibold text-slate-900">-</div>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div class="text-sm text-slate-500 flex items-center gap-2"><i class="ph ph-clock-countdown"></i><span>总定时数</span></div>
+                      <div id="overviewTotalScheduledTasks" class="mt-2 text-2xl font-semibold text-slate-900">-</div>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                      <div class="text-sm text-slate-500 flex items-center gap-2"><i class="ph ph-bell-ringing"></i><span>总推送通道</span></div>
+                      <div id="overviewTotalNotificationChannels" class="mt-2 text-2xl font-semibold text-slate-900">-</div>
+                    </div>
+                    <div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+                      <div class="text-sm text-emerald-700 flex items-center gap-2"><i class="ph ph-check-circle"></i><span>签到成功数量</span></div>
+                      <div id="overviewCheckinSuccessCount" class="mt-2 text-2xl font-semibold text-emerald-700">-</div>
+                    </div>
+                    <div class="rounded-xl border border-rose-200 bg-rose-50/70 p-4">
+                      <div class="text-sm text-rose-700 flex items-center gap-2"><i class="ph ph-x-circle"></i><span>签到错误数量</span></div>
+                      <div id="overviewCheckinFailedCount" class="mt-2 text-2xl font-semibold text-rose-700">-</div>
+                    </div>
+                  </div>
+                  <p id="overviewGeneratedAt" class="mt-4 text-xs text-slate-500">更新时间：-</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- #panel-users -->
+          <section id="panel-users" class="section-panel">
+            <div class="space-y-6">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-user-plus text-primary mr-2"></i>创建登录用户</h2>
+                  <button id="btnToggleCreateUserCard" type="button" @click="isCreateUserOpen = !isCreateUserOpen" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <i class="ph ph-caret-down transition-transform" :class="isCreateUserOpen ? 'rotate-0' : '-rotate-90'"></i>
+                    <span x-text="isCreateUserOpen ? '收起' : '展开'"></span>
+                  </button>
+                </div>
+                <div x-show="isCreateUserOpen" x-collapse>
+                  <form id="createAppUserForm" class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">用户名</label>
+                        <input id="appUsername" required type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">密码</label>
+                        <div class="relative">
+                          <input id="appPassword" required type="password" autocomplete="new-password" class="w-full px-3 py-2 pr-10 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <button id="btnToggleAppPassword" type="button" class="absolute inset-y-0 right-0 px-3 text-slate-500 hover:text-slate-700" title="显示或隐藏密码" aria-label="显示或隐藏密码">
+                            <i class="ph ph-eye text-base"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">确认密码</label>
+                        <div class="relative">
+                          <input id="appPasswordConfirm" required type="password" autocomplete="new-password" class="w-full px-3 py-2 pr-10 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <button id="btnToggleAppPasswordConfirm" type="button" class="absolute inset-y-0 right-0 px-3 text-slate-500 hover:text-slate-700" title="显示或隐藏确认密码" aria-label="显示或隐藏确认密码">
+                            <i class="ph ph-eye text-base"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">状态</label>
+                        <div class="relative">
+                          <select id="appStatus" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm appearance-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                            <option value="active">启用</option>
+                            <option value="disabled">禁用</option>
+                          </select>
+                          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"><i class="ph ph-caret-down"></i></div>
+                        </div>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">激活时间</label>
+                        <input id="appPurchasedAt" type="date" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">失效时间</label>
+                        <input id="appExpiresAt" type="date" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                      </div>
+                    </div>
+                    <p class="mt-3 text-xs text-slate-500">说明：激活时间留空表示从当前时间生效；失效时间留空表示永久有效。</p>
+                    <div class="mt-6 flex justify-end">
+                      <button type="submit" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center">
+                        <i class="ph ph-plus mr-2 text-lg"></i>创建用户
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-list-dashes text-primary mr-2"></i>登录用户列表</h2>
+                </div>
+                <div class="px-6 pt-3">
+                  <div class="inline-flex items-center gap-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+                    <i class="ph ph-info text-sm"></i>
+                    <span>推送通道可在左侧“推送通道”菜单中统一管理，或在“编辑 / 推送通道”中按用户管理。</span>
+                  </div>
+                </div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="appUsersTable" class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">用户名</th>
+                        <th class="px-6 py-3 font-medium">状态</th>
+                        <th class="px-6 py-3 font-medium">订阅</th>
+                        <th class="px-6 py-3 font-medium">用户组</th>
+                        <th class="px-6 py-3 font-medium">管理操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm text-slate-700"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-user-focus text-primary mr-2"></i>注册设置</h2>
+                  <button id="btnSaveRegistrationSettings" type="button" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center">
+                    <i class="ph ph-floppy-disk mr-1.5 text-base"></i>保存设置
+                  </button>
+                </div>
+                <div class="p-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="space-y-1">
+                      <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                        <span class="relative inline-flex items-center">
+                          <input id="regEnabled" type="checkbox" class="peer sr-only" role="switch" aria-label="开放用户注册">
+                          <span class="h-6 w-11 rounded-full bg-slate-300 transition-colors duration-200 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-300"></span>
+                          <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-5"></span>
+                        </span>
+                        <span>开放用户注册</span>
+                      </label>
+                      <p class="text-xs text-slate-400">推荐关闭，避免公开暴露后被恶意注册。</p>
+                    </div>
+                    <div class="space-y-1">
+                      <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                        <span class="relative inline-flex items-center">
+                          <input id="regRequireInvite" type="checkbox" class="peer sr-only" role="switch" aria-label="注册需要邀请码">
+                          <span class="h-6 w-11 rounded-full bg-slate-300 transition-colors duration-200 peer-checked:bg-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-300"></span>
+                          <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-5"></span>
+                        </span>
+                        <span>注册需要邀请码</span>
+                      </label>
+                      <p class="text-xs text-slate-400">建议开启，防止注册接口被批量滥用。</p>
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">注册默认用户组</label>
+                      <div class="relative">
+                        <select id="regDefaultGroupId" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm appearance-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500"><i class="ph ph-caret-down"></i></div>
+                      </div>
+                      <p id="regDefaultGroupHint" class="text-xs text-slate-500">未选择时自动回退到 user 组</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-ticket text-primary mr-2"></i>邀请码管理</h2>
+                </div>
+                <div class="p-6 border-b border-slate-100">
+                  <form id="createInviteCodeForm">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">邀请码（可空自动生成）</label>
+                        <input id="inviteCode" type="text" placeholder="留空自动生成" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">可使用次数（空=不限制）</label>
+                        <input id="inviteMaxUses" type="number" min="0" placeholder="例如 10" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">失效时间（可空）</label>
+                        <input id="inviteExpiresAt" type="datetime-local" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                      </div>
+                    </div>
+                    <div class="mt-6 flex flex-wrap items-center justify-between gap-4">
+                      <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                        <span class="relative inline-flex items-center">
+                          <input id="inviteEnabled" type="checkbox" class="peer sr-only" role="switch" aria-label="创建后立即启用" checked>
+                          <span class="h-6 w-11 rounded-full bg-slate-300 transition-colors duration-200 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-300"></span>
+                          <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform duration-200 peer-checked:translate-x-5"></span>
+                        </span>
+                        <span>创建后立即启用</span>
+                      </label>
+                      <button type="submit" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center">
+                        <i class="ph ph-plus mr-2 text-lg"></i>创建邀请码
+                      </button>
+                    </div>
+                  </form>
+                </div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="inviteCodesTable" class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">邀请码</th>
+                        <th class="px-6 py-3 font-medium">状态</th>
+                        <th class="px-6 py-3 font-medium">已用/上限</th>
+                        <th class="px-6 py-3 font-medium">失效时间</th>
+                        <th class="px-6 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm text-slate-700"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- #panel-groups -->
+          <section id="panel-groups" class="section-panel">
+            <div class="space-y-6">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-users-three text-primary mr-2"></i>创建用户组</h2>
+                  <button type="button" @click="isCreateGroupOpen = !isCreateGroupOpen" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <i class="ph ph-caret-down transition-transform" :class="isCreateGroupOpen ? 'rotate-0' : '-rotate-90'"></i>
+                    <span x-text="isCreateGroupOpen ? '收起' : '展开'"></span>
+                  </button>
+                </div>
+                <div x-show="isCreateGroupOpen" x-collapse>
+                  <form id="createGroupForm" class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">组名</label>
+                        <input id="groupName" required type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">描述</label>
+                        <textarea id="groupDesc" rows="2" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow resize-y min-h-[72px]"></textarea>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">可创建签到账号上限</label>
+                        <div class="grid grid-cols-[130px_minmax(0,1fr)] gap-2">
+                          <select id="groupMaxMode" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                            <option value="unlimited">不限制</option>
+                            <option value="limited">限制数量</option>
+                          </select>
+                          <input id="groupMaxCheckin" type="number" min="0" placeholder="例如 5" disabled class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mt-6 flex justify-end">
+                      <button type="submit" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center">
+                        <i class="ph ph-plus mr-2 text-lg"></i>创建组
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-list-dashes text-primary mr-2"></i>用户组列表</h2>
+                </div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="groupsTable" class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">组名</th>
+                        <th class="px-6 py-3 font-medium">描述</th>
+                        <th class="px-6 py-3 font-medium">签到账号上限</th>
+                        <th class="px-6 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm text-slate-700"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- #panel-admin-notify -->
+          <section id="panel-admin-notify" class="section-panel">
+            <div class="space-y-6">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-bell-ringing text-primary mr-2"></i>全局推送通道管理</h2>
+                  <p class="text-sm text-slate-500 mt-1">管理员可在此统一管理所有用户（含 admin）的推送通道（Bark / Server酱）。</p>
+                </div>
+                <div class="p-6">
+                  <form id="adminOwnNotifyCreateForm">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">所属用户</label>
+                        <select id="adminOwnNotifyOwnerId" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <option value="admin">admin（管理员）</option>
+                        </select>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">通道类型</label>
+                        <select id="adminOwnNotifyProvider" class="df-select w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <option value="bark">Bark</option>
+                          <option value="serverchan">Server酱</option>
+                        </select>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">通道名称</label>
+                        <input id="adminOwnNotifyName" required placeholder="如：管理员iPhone" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5 lg:col-span-4">
+                        <label id="adminOwnNotifyKeyLabel" class="block text-sm font-medium text-slate-700">通道密钥 / 一键复制链接</label>
+                        <div class="grid grid-cols-[minmax(0,1fr)_44px] gap-2">
+                          <input id="adminOwnNotifyBarkKey" required placeholder="支持 Bark Key 或 https://api.day.app/xxxxxxxxx/这里改成你自己的推送内容" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <button id="btnAdminOwnNotifyBarkCopy" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600" title="复制当前输入">
+                            <i class="ph ph-copy text-lg"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="space-y-1.5 lg:col-span-4">
+                        <label id="adminOwnNotifyServerLabel" class="block text-sm font-medium text-slate-700">推送服务地址（可空）</label>
+                        <input id="adminOwnNotifyServerUrl" placeholder="可空，默认自动使用 https://sctapi.ftqq.com/{SendKey}.send" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                    </div>
+                    <div class="mt-6 flex justify-end">
+                      <button id="btnAdminOwnNotifyCreate" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center" type="submit">
+                        <i class="ph ph-plus mr-2 text-lg"></i>创建通道
+                      </button>
+                    </div>
+                  </form>
+                </div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="adminOwnNotifyTable" class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">所属用户</th>
+                        <th class="px-6 py-3 font-medium">名称</th>
+                        <th class="px-6 py-3 font-medium">类型</th>
+                        <th class="px-6 py-3 font-medium">通道密钥</th>
+                        <th class="px-6 py-3 font-medium">服务地址</th>
+                        <th class="px-6 py-3 font-medium">状态</th>
+                        <th class="px-6 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- #panel-checkin -->
+          <section id="panel-checkin" class="section-panel">
+            <div class="space-y-6">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                  <div>
+                    <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-calendar-plus text-primary mr-2"></i>创建签到账号</h2>
+                    <div class="mt-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs text-indigo-700">
+                      <ul class="list-disc pl-4 space-y-1">
+                        <li>显示名仅用于用户区分，建议使用全英语。</li>
+                        <li>自动签到会在设定时间前后 ±5 分钟内波动执行，用于降低固定时间特征。</li>
+                        <li>未签到告警时间即在设定时间时未签到时发出提醒通知（需配置推送通道并绑定）。</li>
+                      </ul>
+                      <button id="btnOpenCheckinEditGuide" type="button" class="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100 transition-colors">
+                        <i class="ph ph-pencil-simple-line"></i>打开编辑示例
+                      </button>
+                    </div>
+                  </div>
+                  <button type="button" @click="isCreateCheckinOpen = !isCreateCheckinOpen" class="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors ml-4">
+                    <i class="ph ph-caret-down transition-transform" :class="isCreateCheckinOpen ? 'rotate-0' : '-rotate-90'"></i>
+                    <span x-text="isCreateCheckinOpen ? '收起' : '展开'"></span>
+                  </button>
+                </div>
+                <div x-show="isCreateCheckinOpen" x-collapse>
+                  <form id="createCheckinForm" class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">显示名</label>
+                        <input id="ckDisplayName" required type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">自动签到时间</label>
+                        <input id="ckCheckinTime" type="time" value="08:00" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">未签到告警时间</label>
+                        <input id="ckWarning" value="23:00" type="time" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                      </div>
+                    </div>
+                    <div class="mt-6 flex flex-wrap items-center justify-between gap-4">
+                      <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                        <span class="relative inline-flex items-center">
+                          <input id="ckAutoQr" type="checkbox" checked class="sr-only df-switch-input" role="switch" aria-label="创建后自动进入二维码登录流程">
+                          <span class="h-6 w-11 rounded-full transition-colors df-switch-track"></span>
+                          <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform df-switch-thumb"></span>
+                        </span>
+                        <span title="建议首次创建后手动触发，确认账号配置无误后再开启自动跳转">创建后自动进入二维码登录流程</span>
+                      </label>
+                      <button type="submit" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center">
+                        <i class="ph ph-plus mr-2 text-lg"></i>创建签到账号
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between bg-slate-50/50 gap-4">
+                  <div>
+                    <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-list-dashes text-primary mr-2"></i>签到账号管理</h2>
+                    <p class="text-xs text-slate-500 mt-1">列表保留核心操作，点击“编辑”可统一管理基础设置、指纹定位、Cookie 与绑定用户。</p>
+                  </div>
+                  <button id="btnRefreshCookieStatusAll" type="button" class="shrink-0 whitespace-nowrap bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center" title="刷新签到账号 Cookie 与签到状态缓存">
+                    <i class="ph ph-arrows-clockwise mr-2 text-lg"></i>刷新状态
+                  </button>
+                </div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="checkinUsersTable" class="w-full text-left border-collapse">
+                    <colgroup>
+                      <col class="col-checkin-id">
+                      <col class="col-checkin-name">
+                      <col class="col-checkin-time">
+                      <col class="col-checkin-runtime">
+                      <col class="col-checkin-login">
+                      <col class="col-checkin-cookie">
+                      <col class="col-checkin-status">
+                      <col class="col-checkin-execution">
+                      <col class="col-checkin-notify">
+                      <col class="col-checkin-action">
+                    </colgroup>
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">显示名</th>
+                        <th class="px-6 py-3 font-medium">自动签到时间</th>
+                        <th class="px-6 py-3 font-medium">未签到告警时间</th>
+                        <th class="px-6 py-3 font-medium">运行状态</th>
+                        <th class="px-6 py-3 font-medium">登录状态</th>
+                        <th class="px-6 py-3 font-medium">Cookie</th>
+                        <th class="px-6 py-3 font-medium">签到状态</th>
+                        <th class="px-6 py-3 font-medium">执行状态</th>
+                        <th class="px-6 py-3 font-medium">推送</th>
+                        <th class="px-6 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-sm text-slate-700"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- #panel-qr -->
+          <section id="panel-qr" class="section-panel">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center mb-1"><i class="ph ph-qr-code text-primary mr-2"></i>二维码转发面板</h2>
+                <p class="text-xs text-slate-500">在“签到账号管理”里点击“二维码登录”后，这里会展示二维码和扫码状态。点击二维码图片可刷新新的二维码会话。</p>
+              </div>
+              <div class="p-6">
+                <div id="qrPanel" class="hidden">
+                  <div class="flex flex-col md:flex-row gap-6 items-start">
+                    <div class="qr-image-wrap p-2 border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-center cursor-pointer">
+                      <img id="qrImage" alt="qr" class="rounded-lg object-contain w-full h-full max-w-[280px] max-h-[280px]">
+                      <div id="qrLoadingMask" class="qr-loading-mask hidden" aria-live="polite">
+                        <span class="qr-loading-spinner" aria-hidden="true"></span>
+                        <span id="qrLoadingText" class="qr-loading-text">二维码加载中...</span>
+                      </div>
+                    </div>
+                    <div class="space-y-3">
+                      <div class="text-sm text-slate-600">会话ID：<code id="qrSessionId" class="bg-slate-100 text-slate-800 px-2 py-1 rounded">-</code></div>
+                      <div class="text-sm text-slate-600">状态：<span id="qrStatus" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">-</span></div>
+                      <p id="qrMessage" class="text-sm text-slate-500">等待中...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- #panel-faq -->
+          <section id="panel-faq" class="section-panel">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-slate-100 bg-white flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-question text-primary mr-2"></i>常见问题</h2>
+                <button id="btnFaqDocs" type="button" class="text-sm font-medium text-slate-600 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors inline-flex items-center gap-1.5" title="查看文档与使用说明" aria-label="查看文档与使用说明">
+                  <i class="ph ph-book-open"></i>查看更多文档
+                </button>
+              </div>
+              <div class="p-6 text-sm text-slate-600 space-y-3">
+                <details class="faq-accordion group rounded-lg border border-slate-200 px-4 py-3 bg-white" open>
+                  <summary class="cursor-pointer list-none font-medium text-slate-800 flex items-center justify-between">
+                    <span>为什么普通用户访问管理员接口会 403？</span>
+                    <i class="ph ph-caret-down transition-transform group-open:rotate-180"></i>
+                  </summary>
+                  <p class="mt-2 text-slate-600">管理员接口仅接受 <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-800">admin token</code>，普通用户 token 会被权限中间件拦截返回 403。</p>
+                </details>
+                <details class="faq-accordion group rounded-lg border border-slate-200 px-4 py-3 bg-white">
+                  <summary class="cursor-pointer list-none font-medium text-slate-800 flex items-center justify-between">
+                    <span>二维码登录超时怎么办？</span>
+                    <i class="ph ph-caret-down transition-transform group-open:rotate-180"></i>
+                  </summary>
+                  <p class="mt-2 text-slate-600">可在“签到账号管理”点击“二维码登录”重新拉起会话，或在二维码面板点击二维码图片刷新。</p>
+                </details>
+                <details class="faq-accordion group rounded-lg border border-slate-200 px-4 py-3 bg-white">
+                  <summary class="cursor-pointer list-none font-medium text-slate-800 flex items-center justify-between">
+                    <span>创建签到账号后建议怎么操作？</span>
+                    <i class="ph ph-caret-down transition-transform group-open:rotate-180"></i>
+                  </summary>
+                  <p class="mt-2 text-slate-600">建议先绑定登录用户与推送通道，再进行二维码登录，最后启用自动任务。</p>
+                </details>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div id="appUserEditModal" class="fixed inset-0 z-[130] bg-slate-900/40 backdrop-blur-sm grid place-items-center p-4 hidden">
+    <div class="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center gap-3 border-b border-slate-100 pb-4 mb-4">
+        <h3 class="text-xl font-bold text-slate-800 m-0">编辑登录用户</h3>
+        <button id="btnAppUserEditClose" type="button" class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg transition-colors"><i class="ph ph-x text-xl"></i></button>
+      </div>
+      <p id="appUserEditHint" class="text-sm text-slate-500 mb-5">-</p>
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-1.5">
+            <label class="block text-sm font-medium text-slate-700">状态</label>
+            <select id="appEditStatus" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+              <option value="active">启用</option>
+              <option value="disabled">禁用</option>
+            </select>
+          </div>
+          <div class="space-y-1.5">
+            <label class="block text-sm font-medium text-slate-700">新密码（留空不改）</label>
+            <input id="appEditPassword" type="password" autocomplete="new-password" placeholder="新密码（留空不改）" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4">
+          <div class="space-y-1.5">
+            <label class="block text-sm font-medium text-slate-700">用户组操作</label>
+            <select id="appEditGroupAction" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+              <option value="none">用户组不变</option>
+              <option value="assign">加入用户组</option>
+              <option value="remove">移出用户组</option>
+            </select>
+          </div>
+          <div class="space-y-1.5">
+            <label class="block text-sm font-medium text-slate-700">选择用户组</label>
+            <select id="appEditGroupId" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+              <option value="">选择用户组</option>
+            </select>
+          </div>
+        </div>
+        <div id="appEditChannelCard" class="border border-slate-200 rounded-xl bg-slate-50/60 p-4">
+          <h4 class="text-base font-semibold text-slate-800 mb-3 flex items-center">
+            <i class="ph ph-bell-ringing text-primary mr-2"></i>推送通道（Bark / Server酱）
+          </h4>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div class="space-y-1">
+              <label class="block text-xs font-medium text-slate-600">通道类型</label>
+              <select id="appEditChannelProvider" class="df-select w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                <option value="bark">Bark</option>
+                <option value="serverchan">Server酱</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="block text-xs font-medium text-slate-600">通道名称</label>
+              <input id="appEditChannelName" placeholder="如：我的iPhone" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+            </div>
+            <div class="space-y-1 md:col-span-2">
+              <label class="block text-xs font-medium text-slate-600">通道密钥 / 一键复制链接</label>
+              <input id="appEditChannelBarkKey" placeholder="支持 Bark Key 或 https://api.day.app/xxxxxxxxx/这里改成你自己的推送内容（留空不修改）" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+            </div>
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700 mb-2">
+              <input id="appEditChannelEnabled" type="checkbox" class="accent-primary" checked>
+              <span>启用</span>
+            </label>
+            <div class="space-y-1 md:col-span-4">
+              <label class="block text-xs font-medium text-slate-600">推送服务地址（可空）</label>
+              <input id="appEditChannelServerUrl" placeholder="可留空使用默认地址" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+            </div>
+          </div>
+          <div class="mt-3 flex justify-end">
+            <button id="btnAppUserChannelCreate" type="button" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center whitespace-nowrap">
+              <i class="ph ph-plus mr-1.5"></i>新增通道
+            </button>
+          </div>
+          <div id="appEditChannelList" class="mt-3 flex flex-col gap-2"></div>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-3">
+        <button id="btnAppUserEditSave" type="button" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center whitespace-nowrap">
+          <i class="ph ph-floppy-disk mr-1.5"></i>保存
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="checkinEditModal" class="fixed inset-0 z-[130] bg-slate-900/40 backdrop-blur-sm grid place-items-center p-4 hidden">
+    <div class="w-full max-w-5xl max-h-[92vh] overflow-y-auto no-scrollbar bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center gap-3 border-b border-slate-100 pb-4 mb-4">
+        <h3 class="text-xl font-bold text-slate-800 m-0">编辑签到账号</h3>
+        <button id="btnCheckinEditClose" type="button" class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg transition-colors"><i class="ph ph-x text-xl"></i></button>
+      </div>
+      <p id="checkinEditHint" class="text-sm text-slate-500 mb-6">-</p>
+      
+      <div class="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-6 items-start">
+        <div class="space-y-6">
+          <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-5">
+            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-gear text-primary mr-2"></i>基础设置</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-1.5">
+                <label class="block text-sm font-medium text-slate-700">显示名</label>
+                <input id="editDisplayName" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-sm font-medium text-slate-700">目标链接</label>
+                <input id="editTargetUrl" placeholder="留空使用默认" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-sm font-medium text-slate-700">自动签到时间</label>
+                <input id="editCheckinTime" type="time" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-sm font-medium text-slate-700">未签到告警时间</label>
+                <input id="editWarningTime" type="time" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+              </div>
+            </div>
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <div class="flex gap-4">
+                <label class="flex items-center text-sm font-medium text-slate-700 cursor-pointer">
+                  <input id="editEnabled" type="checkbox" class="mr-2 accent-primary w-4 h-4 rounded text-primary focus:ring-primary"> 启用账号
+                </label>
+                <label class="flex items-center text-sm font-medium text-slate-700 cursor-pointer">
+                  <input id="editDebugMode" type="checkbox" class="mr-2 accent-primary w-4 h-4 rounded text-primary focus:ring-primary"> Debug模式
+                </label>
+              </div>
+            </div>
+            <p class="mt-4 text-xs text-slate-500">提示：自动签到会在设定时间前后 ±5 分钟内波动执行。</p>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-5">
+            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-map-pin text-primary mr-2"></i>指纹定位</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">纬度</label><input id="editLat" placeholder="latitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary"></div>
+              <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">经度</label><input id="editLng" placeholder="longitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary"></div>
+              <div class="space-y-1.5">
+                <label class="block text-sm font-medium text-slate-700">坐标系</label>
+                <select id="editCoordSystem" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary">
+                  <option value="auto">auto</option><option value="wgs84">wgs84</option><option value="gcj02">gcj02</option><option value="bd09">bd09</option>
+                </select>
+              </div>
+              <div class="space-y-1.5"><label class="block text-sm font-medium text-slate-700">位置精度 (m)</label><input id="editAccuracy" placeholder="默认30" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary"></div>
+            </div>
+            
+            <details class="mt-4 group">
+              <summary class="cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center"><i class="ph ph-caret-right transition-transform group-open:rotate-90 mr-1"></i>高级参数（可选）</summary>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 pl-5 border-l-2 border-indigo-100">
+                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">高度 (m)</label><input id="editAltitude" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
+                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">高度精度 (m)</label><input id="editAltitudeAccuracy" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
+                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">方向 (0-360)</label><input id="editHeading" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
+                <div class="space-y-1.5"><label class="block text-xs font-medium text-slate-600">速度 (m/s)</label><input id="editSpeed" placeholder="可空" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-sm focus:outline-none focus:border-primary"></div>
+              </div>
+            </details>
+            
+            <div class="space-y-1.5 mt-4">
+              <label class="block text-sm font-medium text-slate-700">签到提交地址文本</label>
+              <textarea id="editSubmitAddressText" rows="2" placeholder="可空，建议填写" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary"></textarea>
+            </div>
+          </div>
+        </div>
+        
+        <div class="space-y-6">
+          <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-5">
+            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-cookie text-primary mr-2"></i>Cookie 管理</h4>
+            <div id="editCookieSummary" class="text-sm text-slate-600 bg-white border border-slate-200 rounded-lg p-3 space-y-1.5 min-h-[80px]">-</div>
+            <div class="mt-4 flex flex-wrap gap-3">
+              <button id="btnCheckinCheckCookie" type="button" class="flex-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors text-center whitespace-nowrap">刷新状态</button>
+              <button id="btnCheckinViewCookie" type="button" class="flex-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors text-center whitespace-nowrap">查看详情</button>
+            </div>
+          </div>
+          
+          <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-5">
+            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-link text-primary mr-2"></i>绑定用户</h4>
+            <div class="flex gap-2 mb-4">
+              <input id="editBindAppUserId" placeholder="登录用户ID" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary">
+              <button id="btnCheckinBindUser" type="button" class="bg-indigo-50 text-primary hover:bg-primary hover:text-white border border-indigo-200 hover:border-primary px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap">绑定</button>
+            </div>
+            <div id="editMappingList" class="flex flex-wrap gap-2 text-sm"></div>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl bg-slate-50/50 p-5">
+            <h4 class="text-base font-semibold text-slate-800 mb-4 flex items-center"><i class="ph ph-bell-ringing text-primary mr-2"></i>推送通道绑定</h4>
+            <div class="space-y-2">
+              <select id="editNotifyChannelId" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                <option value="">不绑定（不推送）</option>
+              </select>
+              <p id="editNotifyChannelHint" class="text-xs text-slate-500">仅可选择已绑定用户创建的通道。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+        <button id="btnCheckinSaveAll" type="button" class="bg-primary hover:bg-primaryHover text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center whitespace-nowrap">
+          <i class="ph ph-floppy-disk mr-1.5"></i>保存设置
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="logModal" class="fixed inset-0 z-[130] bg-slate-900/40 backdrop-blur-sm grid place-items-center p-4 hidden">
+    <div class="w-full max-w-5xl max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center gap-3 border-b border-slate-100 pb-4 mb-4 shrink-0">
+        <h3 class="text-xl font-bold text-slate-800 m-0">签到日志</h3>
+        <button id="btnLogModalClose" type="button" class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg transition-colors"><i class="ph ph-x text-xl"></i></button>
+      </div>
+      <div class="flex flex-wrap justify-between items-center mb-4 shrink-0 gap-4">
+        <p id="logModalHint" class="text-sm text-slate-500">-</p>
+        <div class="flex gap-2">
+          <button id="btnLogClear" type="button" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">清除日志</button>
+          <button id="btnLogRefresh" type="button" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm transition-colors whitespace-nowrap">刷新日志</button>
+          <button id="btnLogCopyLatest" type="button" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm transition-colors whitespace-nowrap">复制最近15条</button>
+        </div>
+      </div>
+      <div class="flex-1 min-h-0 overflow-auto border border-slate-200 rounded-xl relative">
+        <table id="logTable" class="w-full text-left border-collapse whitespace-nowrap">
+          <thead class="sticky top-0 bg-slate-50 z-10 shadow-sm border-b border-slate-200">
+            <tr class="text-slate-500 text-sm">
+              <th class="px-6 py-3 font-medium">ID</th><th class="px-6 py-3 font-medium">时间</th><th class="px-6 py-3 font-medium">状态</th>
+              <th class="px-6 py-3 font-medium">耗时(ms)</th><th class="px-6 py-3 font-medium">信息</th><th class="px-6 py-3 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-sm text-slate-700 bg-white"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="logDetailModal" class="fixed inset-0 z-[140] bg-slate-900/40 backdrop-blur-sm grid place-items-center p-4 hidden">
+    <div class="w-full max-w-3xl max-h-[92vh] flex flex-col bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl">
+      <div class="flex justify-between items-center gap-3 border-b border-slate-100 pb-4 mb-4 shrink-0">
+        <h3 class="text-xl font-bold text-slate-800 m-0">日志详情</h3>
+        <div class="flex items-center gap-2">
+          <button id="btnLogDetailCopy" type="button" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm transition-colors whitespace-nowrap"><i class="ph ph-copy mr-1"></i>复制内容</button>
+          <button id="btnLogDetailClose" type="button" class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg transition-colors"><i class="ph ph-x text-xl"></i></button>
+        </div>
+      </div>
+      <p id="logDetailHint" class="text-sm text-slate-500 mb-4 shrink-0">-</p>
+      <div class="flex-1 min-h-0 overflow-auto border border-slate-200 rounded-xl bg-slate-50 p-4 font-mono text-sm text-slate-700">
+        <pre id="logDetailContent" class="whitespace-pre-wrap break-words"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/assets/common.js"></script>
+  <script src="/web/assets/admin.js"></script>
+</body>
+</html>

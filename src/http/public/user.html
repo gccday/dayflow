@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DayFlow 用户中心</title>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('userDashboard', () => ({
+        isCreateCheckinOpen: true
+      }));
+    });
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            primaryHover: '#4338ca',
+            brand: {
+              50: "#eff6ff",
+              100: "#dbeafe",
+              500: "#3b82f6",
+              600: "#2563eb"
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <link rel="stylesheet" href="/web/assets/style.css">
+
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    [x-cloak] { display: none !important; }
+
+    :root {
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-weak: rgba(79, 70, 229, 0.12);
+    }
+
+    #userSidebar button {
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent;
+    }
+    #userSidebar .menu-item {
+      min-height: 44px !important;
+      padding: 0.625rem 0.75rem !important;
+      border: 1px solid transparent !important;
+    }
+    #userSidebar .menu-item i {
+      color: #64748b !important;
+    }
+    #userSidebar .menu-item.active {
+      background-color: #eef2ff !important;
+      color: var(--accent) !important;
+      border-color: #c7d2fe !important;
+      font-weight: 600 !important;
+      box-shadow: inset 2px 0 0 var(--accent) !important;
+    }
+    #userSidebar .menu-item.active i {
+      color: var(--accent) !important;
+    }
+    #userSidebar .menu-item:not(.active):hover,
+    #userSidebar button:hover {
+      background-color: #f8fafc !important;
+      color: #0f172a !important;
+    }
+
+    #mapPickerModal {
+      background: rgba(15, 23, 42, 0.38);
+      backdrop-filter: blur(6px);
+      overflow-y: auto;
+      place-items: start center;
+    }
+    #mapPickerModal .user-location-modal {
+      width: min(1320px, calc(100vw - 48px));
+      max-height: calc(100vh - 48px);
+      padding: 0;
+      border-radius: 24px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2), 0 10px 28px rgba(15, 23, 42, 0.12);
+      overflow: hidden;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      margin: 24px 0;
+    }
+    #mapPickerModal .modal-head {
+      padding: 24px 28px 18px;
+      border-bottom: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(14px);
+    }
+    #mapPickerModal .modal-head h3 {
+      font-size: 28px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    #mapPickerModal .location-modal-body {
+      padding: 24px 28px 28px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.85) 0%, #ffffff 100%);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      min-height: 0;
+      flex: 1 1 auto;
+    }
+    #mapPickerModal .location-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    #mapPickerModal .location-modal-layout {
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      gap: 20px;
+    }
+    #mapPickerModal .location-pane-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      background: #fff;
+      padding: 20px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03), 0 12px 28px rgba(15, 23, 42, 0.04);
+    }
+    #mapPickerModal .location-primary-card {
+      padding: 24px;
+    }
+    #mapPickerModal .location-search-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+    #mapPickerModal .location-fields-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    #mapPickerModal .location-meta-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+    #mapPickerModal .location-actions-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+    #mapPickerModal .location-callout {
+      margin-top: 16px;
+      border: 1px solid #c7d2fe;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(238, 242, 255, 0.9) 0%, rgba(248, 250, 252, 0.98) 100%);
+      padding: 16px 18px;
+      color: #475569;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    #mapPickerModal .location-callout strong {
+      color: #0f172a;
+    }
+    #mapPickerModal .map-canvas-wrap {
+      min-height: 340px;
+      margin-top: 16px;
+    }
+    #mapPickerModal .map-canvas {
+      margin: 0;
+      border-radius: 18px;
+      border-color: #e2e8f0;
+      background: #f8fafc;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+    #mapPickerModal #mapFingerprintDetails {
+      padding: 0;
+      overflow: hidden;
+    }
+    #mapPickerModal #mapFingerprintDetails > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 18px 22px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #1e293b;
+      background: #fff;
+      margin: 0;
+    }
+    #mapPickerModal #mapFingerprintDetails > summary::-webkit-details-marker {
+      display: none;
+    }
+    #mapPickerModal #mapFingerprintDetails[open] > summary {
+      border-bottom: 1px solid #e2e8f0;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    #mapPickerModal .fingerprint-content {
+      padding: 20px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.72) 0%, #ffffff 100%);
+    }
+    #mapPickerModal .fingerprint-note {
+      margin-bottom: 18px;
+      border: 1px solid #dbeafe;
+      border-radius: 16px;
+      background: #eff6ff;
+      padding: 14px 16px;
+      color: #475569;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    #mapPickerModal .location-advanced {
+      margin-top: 18px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #f8fafc;
+      overflow: hidden;
+    }
+    #mapPickerModal .location-advanced > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #334155;
+      margin: 0;
+    }
+    #mapPickerModal .location-advanced > summary::-webkit-details-marker {
+      display: none;
+    }
+    #mapPickerModal .location-advanced[open] > summary {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    #mapPickerModal .location-advanced-body {
+      padding: 16px;
+    }
+    #mapPickerModal #mapPickerTip.msg {
+      margin-top: 18px;
+      margin-bottom: 0;
+      border-radius: 16px;
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    @media (max-width: 1024px) {
+      #mapPickerModal .user-location-modal {
+        width: min(100%, calc(100vw - 20px));
+        max-height: calc(100vh - 24px);
+        margin: 12px 0;
+      }
+      #mapPickerModal .location-modal-body {
+        padding: 18px;
+      }
+      #mapPickerModal .location-modal-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 768px) {
+      #mapPickerModal .modal-head {
+        padding: 18px 18px 14px;
+      }
+      #mapPickerModal .modal-head h3 {
+        font-size: 24px;
+      }
+      #mapPickerModal .location-search-grid,
+      #mapPickerModal .location-fields-grid {
+        grid-template-columns: 1fr;
+      }
+      #mapPickerModal .location-actions-row {
+        justify-content: stretch;
+      }
+      #mapPickerModal .location-actions-row button {
+        flex: 1 1 auto;
+      }
+      #mapPickerModal #mapFingerprintDetails > summary,
+      #mapPickerModal .fingerprint-content,
+      #mapPickerModal .location-pane-card,
+      #mapPickerModal .location-primary-card {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+      #mapPickerModal .map-canvas {
+        min-height: 280px;
+      }
+    }
+
+    #autoPauseModal {
+      background: rgba(15, 23, 42, 0.38);
+      backdrop-filter: blur(6px);
+    }
+    #autoPauseModal .auto-pause-modal {
+      width: min(760px, calc(100vw - 32px));
+      max-height: calc(100vh - 48px);
+      padding: 0;
+      border-radius: 24px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2), 0 10px 28px rgba(15, 23, 42, 0.12);
+      overflow: hidden;
+      background: #fff;
+    }
+    #autoPauseModal .modal-head {
+      padding: 24px 28px 18px;
+      border-bottom: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(14px);
+    }
+    #autoPauseModal .modal-head h3 {
+      font-size: 28px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    #autoPauseModal .auto-pause-body {
+      padding: 24px 28px 28px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.85) 0%, #ffffff 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    #autoPauseModal #autoPauseHint {
+      margin: 0;
+    }
+    #timeSettingsModal {
+      background: rgba(15, 23, 42, 0.38);
+      backdrop-filter: blur(6px);
+    }
+    #timeSettingsModal .time-settings-modal {
+      width: min(760px, calc(100vw - 32px));
+      max-height: calc(100vh - 48px);
+      padding: 0;
+      border-radius: 24px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2), 0 10px 28px rgba(15, 23, 42, 0.12);
+      overflow: hidden;
+      background: #fff;
+    }
+    #timeSettingsModal .modal-head {
+      padding: 24px 28px 18px;
+      border-bottom: 1px solid #e2e8f0;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(14px);
+    }
+    #timeSettingsModal .modal-head h3 {
+      font-size: 28px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+    #timeSettingsModal .time-settings-body {
+      padding: 24px 28px 28px;
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.85) 0%, #ffffff 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    #timeSettingsModal #timeSettingsHint {
+      margin: 0;
+    }
+    @media (max-width: 768px) {
+      #autoPauseModal .auto-pause-modal {
+        width: min(100%, calc(100vw - 16px));
+        max-height: calc(100vh - 20px);
+      }
+      #autoPauseModal .modal-head {
+        padding: 18px 18px 14px;
+      }
+      #autoPauseModal .modal-head h3 {
+        font-size: 24px;
+      }
+      #autoPauseModal .auto-pause-body {
+        padding: 18px;
+      }
+      #timeSettingsModal .time-settings-modal {
+        width: min(100%, calc(100vw - 16px));
+        max-height: calc(100vh - 20px);
+      }
+      #timeSettingsModal .modal-head {
+        padding: 18px 18px 14px;
+      }
+      #timeSettingsModal .modal-head h3 {
+        font-size: 24px;
+      }
+      #timeSettingsModal .time-settings-body {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased" x-data="userDashboard()">
+
+  <div id="msg" class="msg floating-msg hidden"></div>
+
+  <div class="dashboard-shell flex h-screen overflow-hidden">
+    <aside id="userSidebar" class="sidebar bg-white border-r border-slate-200 flex flex-col transition-all duration-300 z-20">
+      <div class="h-16 flex items-center px-6 border-b border-slate-100 shrink-0">
+        <i class="ph-fill ph-infinity text-primary text-2xl mr-3"></i>
+        <span class="text-lg font-bold text-slate-900 tracking-tight">DayFlow</span>
+      </div>
+
+      <nav class="flex-1 overflow-y-auto no-scrollbar py-4 px-3 space-y-1 menu-list">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-3 mt-4">菜单导航</div>
+
+        <button class="menu-item w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50 active" data-menu-target="user-panel-profile">
+          <i class="ph ph-user-circle text-lg mr-3 text-slate-500"></i>账号信息
+        </button>
+
+        <button class="menu-item w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50" data-menu-target="user-panel-checkin">
+          <i class="ph ph-calendar-check text-lg mr-3 text-slate-500"></i>签到账号
+        </button>
+        <button class="menu-item w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left text-slate-700 hover:bg-slate-50" data-menu-target="user-panel-notify">
+          <i class="ph ph-bell-ringing text-lg mr-3 text-slate-500"></i>推送通道
+        </button>
+      </nav>
+
+      <div class="p-4 border-t border-slate-100 flex items-center shrink-0">
+        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">U</div>
+        <div class="ml-3">
+          <p id="userSidebarName" class="text-sm font-medium text-slate-900">-</p>
+          <p class="text-xs text-slate-500">用户</p>
+        </div>
+      </div>
+    </aside>
+
+    <div id="userSidebarBackdrop" class="sidebar-backdrop"></div>
+
+    <div class="flex-1 flex flex-col h-screen overflow-hidden relative content-area">
+      <header class="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-6 z-10 shrink-0 sticky top-0">
+        <div class="flex items-center">
+          <button id="btnMenuToggle" class="sidebar-toggle mr-4 p-2 text-slate-500 hover:bg-slate-100 rounded-lg" type="button" aria-label="切换菜单" aria-controls="userSidebar" aria-expanded="false">
+            <i class="ph ph-list text-xl"></i>
+          </button>
+          <h1 class="text-xl font-bold text-slate-800 tracking-tight">用户中心</h1>
+        </div>
+
+        <div id="userHeaderActions" class="flex items-center gap-3">
+          <button id="btnRefresh" class="px-3 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center gap-1.5" title="刷新当前面板" aria-label="刷新当前面板"><i class="ph ph-arrows-clockwise text-xl"></i><span id="btnRefreshText" class="hidden md:inline">刷新</span></button>
+          <button id="btnLogout" class="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100 flex items-center" title="退出登录" aria-label="退出登录"><i class="ph ph-sign-out mr-1"></i>退出登录</button>
+        </div>
+      </header>
+
+      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-slate-50 p-6">
+        <div class="max-w-7xl mx-auto space-y-6">
+
+          <section id="user-panel-profile" class="section-panel active">
+            <div id="createCheckinCard" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-user text-primary mr-2"></i>账号信息</h2>
+                <p class="text-sm text-slate-500 mt-1">当前用户：<span id="userName">-</span></p>
+              </div>
+              <div class="p-6">
+                <div id="profile"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="user-panel-checkin" class="section-panel">
+            <div class="space-y-6">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" x-data="{open: true}">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-calendar-plus text-primary mr-2"></i>创建签到账号</h2>
+                  <button type="button" @click="open = !open" class="text-sm font-medium text-slate-500 px-3 py-1.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <span x-text="open ? '收起' : '展开'"></span>
+                  </button>
+                </div>
+                <div x-show="open" x-collapse>
+                  <div class="p-6">
+                    <p class="text-sm text-slate-500 mb-2">每个账号可创建数量由所属用户组限制。</p>
+                    <p class="text-sm text-slate-500 mb-4">自动签到会在设定时间前后 ±5 分钟内波动执行。</p>
+                    <div id="quotaText" class="msg">配额加载中...</div>
+                    <form id="createCheckinForm" class="mt-4">
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">显示名</label>
+                          <input id="ckDisplayName" required type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">自动签到时间</label>
+                          <input id="ckCheckinTime" type="time" value="08:00" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">未签到告警时间</label>
+                          <input id="ckWarning" value="23:00" type="time" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+                        </div>
+                        <div class="flex items-end md:col-span-2 lg:col-span-1">
+                          <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                            <span class="relative inline-flex items-center">
+                              <input id="ckAutoQr" type="checkbox" checked class="sr-only df-switch-input" role="switch" aria-label="创建完成后自动进入二维码登录">
+                              <span class="h-6 w-11 rounded-full transition-colors df-switch-track"></span>
+                              <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform df-switch-thumb"></span>
+                            </span>
+                            <span title="建议用户手动触发，避免创建后意外跳转">创建完成后自动进入二维码登录</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div class="mt-6 flex justify-end">
+                        <button class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center" id="btnCreateCheckin" type="submit">
+                          <i class="ph ph-plus mr-2 text-lg"></i>创建签到账号
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-list-dashes text-primary mr-2"></i>签到账号</h2>
+                  <button id="btnRefreshCookieStatusAll" type="button" class="shrink-0 whitespace-nowrap bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center" title="刷新 Cookie 与签到状态">
+                    <i class="ph ph-arrows-clockwise mr-2"></i>刷新状态
+                  </button>
+                </div>
+                <div class="px-6 pt-4 text-sm text-slate-500">创建后请在这里自行完成“二维码登录”、Cookie状态检查和“设置位置”。</div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="checkinTable" class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">账号</th>
+                        <th class="px-6 py-3 font-medium">状态摘要</th>
+                        <th class="px-6 py-3 font-medium">时间设置</th>
+                        <th class="px-6 py-3 font-medium">位置</th>
+                        <th class="px-6 py-3 font-medium">推送 / Cookie</th>
+                        <th class="px-6 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="user-panel-notify" class="section-panel">
+            <div class="space-y-6">
+              <div id="notifyAdminHint" class="hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                当前为管理员账号。推送通道请在“管理控制台 -> 用户管理 -> 登录用户列表 -> 推送通道”中配置到具体用户。
+              </div>
+
+              <div id="notifyCreateCard" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-bell-ringing text-primary mr-2"></i>创建推送通道（Bark / Server酱）</h2>
+                  <p class="text-sm text-slate-500 mt-1">每个用户可创建多个通道，再在签到账号中绑定其中一个。</p>
+                </div>
+                <div class="p-6">
+                  <form id="createNotifyChannelForm">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">通道类型</label>
+                        <select id="notifyChannelProvider" class="df-select w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <option value="bark">Bark</option>
+                          <option value="serverchan">Server酱</option>
+                        </select>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label class="block text-sm font-medium text-slate-700">通道名称</label>
+                        <input id="notifyChannelName" required placeholder="如：我的iPhone" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                      <div class="space-y-1.5 lg:col-span-2">
+                        <label id="notifyChannelKeyLabel" class="block text-sm font-medium text-slate-700">通道密钥 / 一键复制链接</label>
+                        <div class="grid grid-cols-[minmax(0,1fr)_44px] gap-2">
+                          <input id="notifyChannelBarkKey" required placeholder="支持 Bark Key 或 https://api.day.app/xxxxxxxxx/这里改成你自己的推送内容" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                          <button id="btnNotifyBarkCopy" type="button" class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600" title="复制当前输入" aria-label="复制当前输入">
+                            <i class="ph ph-copy text-lg"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div class="space-y-1.5 lg:col-span-4">
+                        <label id="notifyChannelServerLabel" class="block text-sm font-medium text-slate-700">推送服务地址（可空）</label>
+                        <input id="notifyChannelServerUrl" placeholder="可空，默认自动使用 https://sctapi.ftqq.com/{SendKey}.send" type="text" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                      </div>
+                    </div>
+                    <div class="mt-6 flex justify-end">
+                      <button id="btnCreateNotifyChannel" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors flex items-center" type="submit">
+                        <i class="ph ph-plus mr-2 text-lg"></i>创建通道
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                  <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-list-dashes text-primary mr-2"></i>我的推送通道</h2>
+                </div>
+                <div class="overflow-x-auto table-wrap border-0 rounded-none">
+                  <table id="notifyChannelsTable" class="w-full text-left border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-sm">
+                        <th class="px-6 py-3 font-medium">ID</th>
+                        <th class="px-6 py-3 font-medium">名称</th>
+                        <th class="px-6 py-3 font-medium">类型</th>
+                        <th class="px-6 py-3 font-medium">通道密钥</th>
+                        <th class="px-6 py-3 font-medium">服务地址</th>
+                        <th class="px-6 py-3 font-medium">状态</th>
+                        <th class="px-6 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="user-panel-qr" class="section-panel">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hidden" id="qrPanel">
+              <div class="px-6 py-4 border-b border-slate-100 bg-white">
+                <h2 class="text-lg font-semibold text-slate-800 flex items-center"><i class="ph ph-qr-code text-primary mr-2"></i>二维码登录</h2>
+                <p class="text-sm text-slate-500 mt-1">点击二维码图片可刷新新的二维码会话。</p>
+              </div>
+              <div class="p-6">
+                <div class="flex flex-col md:flex-row gap-6 items-start">
+                  <div class="qr-image-wrap p-2 border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-center cursor-pointer">
+                    <img id="qrImage" alt="qr" class="rounded-lg object-contain w-full h-full max-w-[280px] max-h-[280px]">
+                    <div id="qrLoadingMask" class="qr-loading-mask hidden" aria-live="polite">
+                      <span class="qr-loading-spinner" aria-hidden="true"></span>
+                      <span id="qrLoadingText" class="qr-loading-text">二维码加载中...</span>
+                    </div>
+                  </div>
+                  <div class="space-y-3">
+                    <div class="text-sm text-slate-600">会话ID：<code id="qrSessionId" class="bg-slate-100 text-slate-800 px-2 py-1 rounded">-</code></div>
+                    <div class="text-sm text-slate-600">状态：<span id="qrStatus" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">-</span></div>
+                    <p id="qrMessage" class="text-sm text-slate-500">等待中...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+              <div class="p-6 text-sm text-slate-500">请先到“签到账号”模块点击“二维码登录”，这里会展示会话二维码与结果。</div>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="changePasswordModal" class="modal hidden">
+    <div class="modal-card" style="max-width:560px;">
+      <div class="modal-head">
+        <h3>修改登录密码</h3>
+        <button id="btnChangePasswordClose" type="button">关闭</button>
+      </div>
+      <div class="legacy-grid">
+        <div>
+          <label>当前密码</label>
+          <input id="changePasswordCurrent" type="password" autocomplete="current-password" placeholder="请输入当前密码">
+        </div>
+        <div>
+          <label>新密码</label>
+          <input id="changePasswordNext" type="password" autocomplete="new-password" placeholder="至少 6 位">
+        </div>
+        <div>
+          <label>确认新密码</label>
+          <input id="changePasswordConfirm" type="password" autocomplete="new-password" placeholder="再次输入新密码">
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end; margin-top:12px;">
+        <button id="btnChangePasswordSave" class="primary" type="button">保存新密码</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="autoPauseModal" class="modal hidden">
+    <div class="modal-card auto-pause-modal">
+      <div class="modal-head">
+        <h3>暂停自动签到</h3>
+        <button id="btnAutoPauseClose" type="button" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+          关闭
+        </button>
+      </div>
+      <div class="auto-pause-body">
+        <p id="autoPauseHint" class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600 shadow-sm">-</p>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <label class="mb-2 block text-sm font-semibold text-slate-700">暂停到日期（含当天）</label>
+          <input id="autoPauseUntilDate" type="date" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-800 shadow-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-indigo-100">
+          <p id="autoPauseWeekday" class="mt-3 text-sm text-slate-500">选择日期后会显示截止到周几，到期次日自动恢复自动签到。</p>
+        </div>
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm leading-7 text-emerald-900">
+          这里只会暂停自动定时签到，未签到告警仍按原时间继续提醒。
+        </div>
+        <div class="flex flex-wrap justify-end gap-3">
+          <button id="btnAutoPauseClear" type="button" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+            恢复自动签到
+          </button>
+          <button id="btnAutoPauseSave" class="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-medium text-white shadow-sm shadow-indigo-200 transition-colors hover:bg-primaryHover" type="button">
+            保存暂停日期
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="timeSettingsModal" class="modal hidden">
+    <div class="modal-card time-settings-modal">
+      <div class="modal-head">
+        <h3>修改时间设置</h3>
+        <button id="btnTimeSettingsClose" type="button" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+          关闭
+        </button>
+      </div>
+      <div class="time-settings-body">
+        <p id="timeSettingsHint" class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600 shadow-sm">-</p>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="mb-2 block text-sm font-semibold text-slate-700">自动签到时间</label>
+              <input id="timeSettingsCheckinTime" type="time" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-800 shadow-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-indigo-100">
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-semibold text-slate-700">未签到告警时间</label>
+              <input id="timeSettingsWarningTime" type="time" class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-800 shadow-sm outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-indigo-100">
+            </div>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900">
+          修改后会立即影响后续自动签到和未签到提醒时间，自动签到实际执行会在设定时间前后 ±5 分钟内波动。
+        </div>
+        <div class="flex flex-wrap justify-end gap-3">
+          <button id="btnTimeSettingsSave" class="inline-flex items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-medium text-white shadow-sm shadow-indigo-200 transition-colors hover:bg-primaryHover" type="button">
+            保存时间设置
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mapPickerModal" class="modal hidden">
+    <div class="modal-card location-modal-card user-location-modal">
+      <div class="modal-head">
+        <div>
+          <h3>设置签到位置</h3>
+          <p id="mapTargetUserHint" class="mt-2 text-sm text-slate-500 leading-6">-</p>
+        </div>
+        <button id="btnMapPickerClose" type="button" class="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors">关闭</button>
+      </div>
+      <div class="location-modal-body">
+        <div class="location-stack">
+          <section class="location-pane-card location-primary-card">
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h4 class="text-base font-semibold text-slate-800 mb-1">签到提交地址文本</h4>
+                <p class="text-sm text-slate-500 m-0">这里的文本才会真实提交到签到接口，用于位置认证。</p>
+              </div>
+            </div>
+            <div class="space-y-1.5">
+              <label class="block text-sm font-medium text-slate-700">签到提交地址文本（实际提交到签到接口）</label>
+              <textarea id="mapSubmitAddressText" rows="3" placeholder="如：校园南门附近" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow"></textarea>
+            </div>
+            <div class="location-meta-row">
+              <span id="mapAddressSource" class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">未填写地址</span>
+            </div>
+            <div class="location-callout">
+              <div>签到位置认证看的是上面的<strong>地址文本</strong>，不是经纬度。</div>
+              <div class="mt-2">请先打开官方小程序，复制签到位置名称，再把省、市、区、街道等前缀删掉，只保留类似<strong>校园南门附近</strong>这种核心名称。</div>
+            </div>
+            <div class="location-actions-row">
+              <button id="btnMapSave" class="bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm shadow-indigo-200 transition-colors" type="button">保存位置设置</button>
+            </div>
+          </section>
+
+          <details id="mapFingerprintDetails" class="location-pane-card">
+            <summary>浏览器指纹模拟伪装（可选）</summary>
+            <div class="fingerprint-content">
+              <div class="fingerprint-note">下面这些地图、经纬度、精度和传感器参数只用于浏览器侧模拟，对实际签到提交基本没有作用。签到接口不会提交这些坐标。</div>
+              <div class="location-modal-layout">
+                <section class="location-pane-card">
+                  <div class="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h4 class="text-base font-semibold text-slate-800 mb-1">模拟坐标</h4>
+                      <p class="text-sm text-slate-500 m-0">需要时可搜索地点或直接点击地图，更新浏览器模拟坐标。</p>
+                    </div>
+                  </div>
+                  <div class="location-search-grid">
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">地点关键词</label>
+                      <input id="mapSearchKeyword" placeholder="如：广州塔" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                    <button id="btnMapSearch" type="button" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">搜索</button>
+                    <button id="btnMapCenterCurrent" type="button" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">回到当前坐标</button>
+                  </div>
+                  <div id="mapPickerCanvasWrap" class="map-canvas-wrap">
+                    <div id="mapPickerCanvas" class="map-canvas"></div>
+                  </div>
+                </section>
+                <section class="location-pane-card">
+                  <div class="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h4 class="text-base font-semibold text-slate-800 mb-1">模拟参数</h4>
+                      <p class="text-sm text-slate-500 m-0">仅影响浏览器指纹展示，不参与签到接口实际提交。</p>
+                    </div>
+                  </div>
+                  <div class="location-fields-grid">
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">纬度</label>
+                      <input id="mapLatInput" placeholder="latitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">经度</label>
+                      <input id="mapLngInput" placeholder="longitude" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">坐标系</label>
+                      <select id="mapCoordSystem" class="df-select w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        <option value="auto">auto</option>
+                        <option value="wgs84">wgs84</option>
+                        <option value="gcj02">gcj02</option>
+                        <option value="bd09">bd09</option>
+                      </select>
+                    </div>
+                    <div class="space-y-1.5">
+                      <label class="block text-sm font-medium text-slate-700">位置精度 (accuracy, m)</label>
+                      <input id="mapAccuracyInput" placeholder="默认 30" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                    </div>
+                  </div>
+                  <details class="location-advanced">
+                    <summary>高级参数（可选）</summary>
+                    <div class="location-advanced-body">
+                      <div class="location-fields-grid">
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">高度 (altitude, m)</label>
+                          <input id="mapAltitudeInput" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">高度精度 (altitudeAccuracy, m)</label>
+                          <input id="mapAltitudeAccuracyInput" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">方向 (heading, 0-360)</label>
+                          <input id="mapHeadingInput" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        </div>
+                        <div class="space-y-1.5">
+                          <label class="block text-sm font-medium text-slate-700">速度 (speed, m/s)</label>
+                          <input id="mapSpeedInput" placeholder="可空" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow">
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+                  <div class="location-actions-row">
+                    <button id="btnMapClearOptional" type="button" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">恢复默认模拟值</button>
+                  </div>
+                </section>
+              </div>
+              <div id="mapPickerTip" class="msg hidden"></div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="logModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>签到日志（最近15条）</h3>
+        <button id="btnLogModalClose" type="button">关闭</button>
+      </div>
+      <p id="logModalHint" class="subtitle">-</p>
+      <div class="row" style="justify-content:flex-end; margin-bottom:8px;">
+        <button id="btnLogClear" class="warn" type="button">清除日志</button>
+        <button id="btnLogRefresh" type="button">刷新日志</button>
+      </div>
+      <div class="table-wrap">
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>时间</th>
+              <th>状态</th>
+              <th>耗时(ms)</th>
+              <th>信息</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="notifyBindModal" class="modal hidden">
+    <div class="modal-card" style="max-width:560px;">
+      <div class="modal-head">
+        <h3>绑定推送通道</h3>
+        <button id="btnNotifyBindClose" type="button">关闭</button>
+      </div>
+      <p id="notifyBindHint" class="subtitle">-</p>
+      <div class="legacy-grid">
+        <div>
+          <label>推送通道</label>
+          <select id="notifyBindSelect">
+            <option value="">不绑定（不推送）</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="justify-content:flex-end; margin-top:12px;">
+        <button id="btnNotifyBindSave" class="primary" type="button">保存绑定</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/assets/common.js"></script>
+  <script src="/web/assets/user.js"></script>
+</body>
+</html>

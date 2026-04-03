@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  dayflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dayflow
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data

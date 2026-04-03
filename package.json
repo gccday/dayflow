@@ -1,0 +1,29 @@
+{
+  "name": "dayflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DayFlow auto check-in worker with Playwright + SQLite",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "run-once": "node src/index.js --once",
+    "db:init": "node src/index.js --init-db",
+    "seed:demo": "node src/index.js --seed-demo",
+    "set-admin-password": "node src/index.js --set-admin-password",
+    "install:git-hook": "node src/index.js --install-git-hook",
+    "check:git-guard": "node src/index.js --check-git-guard"
+  },
+  "dependencies": {
+    "argon2": "^0.41.1",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-schedule": "^2.1.1",
+    "playwright": "^1.54.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "ws": "^8.20.0"
+  }
+}

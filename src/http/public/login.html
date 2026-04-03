@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DayFlow 登录</title>
+  
+  <script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('loginPage', () => ({ showPassword: false }))
+    })
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            primaryHover: '#4338ca',
+          }
+        }
+      }
+    };
+  </script>
+  
+  <link rel="stylesheet" href="/web/assets/style.css">
+  
+  <style>
+    /* Reset old styles leaking from style.css */
+    .msg { display: none; }
+    .msg.ok { display: block; color: #059669; background: #d1fae5; border-color: #34d399; }
+    .msg.error { display: block; color: #dc2626; background: #fee2e2; border-color: #f87171; }
+    button { border: none !important; box-shadow: none !important; }
+    
+    /* Handle btn loading state specifically for the new tailwind button */
+    button.is-loading {
+      opacity: 0.8;
+      pointer-events: none;
+      color: transparent !important;
+    }
+    button.is-loading::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 1.25rem;
+      height: 1.25rem;
+      margin-top: -0.625rem;
+      margin-left: -0.625rem;
+      border: 2px solid white;
+      border-right-color: transparent;
+      border-top-color: transparent;
+      border-radius: 999px;
+      animation: dailyflow-btn-spin 0.65s linear infinite;
+    }
+    @keyframes dailyflow-btn-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex items-center justify-center p-4">
+  
+  <main class="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden" x-data="loginPage()">
+    <div class="px-8 py-10">
+      <h1 class="text-2xl font-bold text-slate-800 tracking-tight text-center mb-6">DayFlow 系统</h1>
+
+      <div class="mb-6 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+        <button id="tabLogin" type="button" class="rounded-md px-3 py-2 text-sm font-medium bg-white text-slate-800 shadow-sm">登录</button>
+        <button id="tabRegister" type="button" class="rounded-md px-3 py-2 text-sm font-medium text-slate-500">注册</button>
+      </div>
+      
+      <div id="loginMsg" class="msg px-4 py-3 rounded-lg text-sm border mb-6 text-center shadow-sm"></div>
+      
+      <form id="loginForm" class="space-y-5">
+        <div class="space-y-1.5">
+          <label class="block text-sm font-medium text-slate-700">用户名</label>
+          <input id="username" autocomplete="username" placeholder="用户名" required type="text" class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+        </div>
+        
+        <div class="space-y-1.5">
+          <label class="block text-sm font-medium text-slate-700">密码</label>
+          <div class="relative">
+            <input id="password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" required class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700 pr-16" placeholder="请输入密码">
+            <button type="button" @click="showPassword = !showPassword" class="absolute inset-y-0 right-0 px-3 flex items-center text-sm font-medium text-primary hover:text-primaryHover focus:outline-none bg-transparent h-full">
+              <span x-text="showPassword ? '隐藏' : '显示'">显示</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="pt-2">
+          <button type="submit" class="w-full bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center justify-center relative">
+            登录
+          </button>
+        </div>
+      </form>
+
+      <form id="registerForm" class="space-y-5 hidden">
+        <div class="space-y-1.5">
+          <label class="block text-sm font-medium text-slate-700">用户名</label>
+          <input id="registerUsername" autocomplete="username" placeholder="请输入注册用户名" type="text" class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+        </div>
+        <div class="space-y-1.5">
+          <label class="block text-sm font-medium text-slate-700">密码</label>
+          <input id="registerPassword" autocomplete="new-password" placeholder="至少 6 位" type="password" class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+        </div>
+        <div class="space-y-1.5">
+          <label class="block text-sm font-medium text-slate-700">确认密码</label>
+          <input id="registerPasswordConfirm" autocomplete="new-password" placeholder="再次输入密码" type="password" class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+        </div>
+        <div id="registerInviteWrap" class="space-y-1.5 hidden">
+          <label class="block text-sm font-medium text-slate-700">邀请码</label>
+          <input id="registerInviteCode" placeholder="请输入邀请码" type="text" class="w-full px-4 py-2 bg-white border border-slate-300 rounded-lg text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow text-slate-700">
+        </div>
+        <p id="registerHint" class="text-xs text-slate-500"></p>
+        <div class="pt-2">
+          <button type="submit" class="w-full bg-primary hover:bg-primaryHover text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center justify-center relative">
+            注册
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script src="/web/assets/common.js"></script>
+  <script src="/web/assets/login.js"></script>
+</body>
+</html>
