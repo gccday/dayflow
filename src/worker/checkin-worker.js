@@ -217,18 +217,103 @@ class CheckinWorker {
     );
   }
 
-  getNotifyOptionsForUser(user, options = {}) {
+  resolveNotificationChannelForUser(user, options = {}) {
     const opts = options && typeof options === "object" ? options : {};
     const checkinUserId = Number(opts.checkinUserId || (user && user.id ? user.id : 0));
-    const channel = Number.isFinite(checkinUserId) && checkinUserId > 0
-      ? this.repo.getEffectiveNotificationChannelByCheckinUserId(checkinUserId)
-      : null;
+    if (!Number.isFinite(checkinUserId) || checkinUserId <= 0) {
+      return null;
+    }
+    const boundChannel = this.repo.getEffectiveNotificationChannelByCheckinUserId(checkinUserId);
+    if (boundChannel) {
+      return boundChannel;
+    }
+    const availableChannels = Array.isArray(this.repo.listNotificationChannelsByCheckinUserId(checkinUserId))
+      ? this.repo
+          .listNotificationChannelsByCheckinUserId(checkinUserId)
+          .filter((channel) => Number(channel && channel.enabled) === 1)
+      : [];
+    if (availableChannels.length === 1) {
+      const fallbackChannel = availableChannels[0];
+      this.logger.info("notification fallback channel selected", {
+        user: user && user.user_key ? user.user_key : "",
+        channelId: Number(fallbackChannel.id || 0) || null,
+        channelName: String(fallbackChannel.name || "")
+      });
+      return fallbackChannel;
+    }
+    return null;
+  }
+
+  getNotifyOptionsForUser(user, options = {}) {
+    const channel = this.resolveNotificationChannelForUser(user, options);
     return channel ? { channel } : {};
+  }
+
+  describeTrigger(trigger) {
+    const normalized = String(trigger || "").trim().toLowerCase();
+    if (normalized === "scheduler") {
+      return "自动签到";
+    }
+    if (normalized === "manual") {
+      return "手动签到";
+    }
+    return "签到";
+  }
+
+  buildCheckinNotificationMessage(user, message, options = {}) {
+    const opts = options && typeof options === "object" ? options : {};
+    const tz = (user && user.timezone) || this.config.defaultTimezone || "Asia/Shanghai";
+    const displayName =
+      String((user && (user.display_name || user.displayName || user.user_key)) || "").trim() ||
+      `签到账号#${Number(user && user.id) || 0}`;
+    const occurredAt = formatDateTimeInTz(Date.now(), tz);
+    const parts = [
+      `账号：${displayName}`,
+      `触发：${this.describeTrigger(opts.trigger)}`
+    ];
+    if (opts.runDate) {
+      parts.push(`日期：${String(opts.runDate)}`);
+    }
+    if (occurredAt) {
+      parts.push(`时间：${occurredAt}`);
+    }
+    parts.push(`结果：${truncateText(String(message || "未知结果"), 400)}`);
+    return parts.join("\n");
   }
 
   async notifyUserText(user, title, message, options = {}) {
     const notifyOptions = this.getNotifyOptionsForUser(user, options);
-    return this.notifier.sendText(user, title, message, notifyOptions);
+    const sent = await this.notifier.sendText(user, title, message, notifyOptions);
+    if (!sent) {
+      const channelId =
+        notifyOptions.channel && Number.isFinite(Number(notifyOptions.channel.id))
+          ? Number(notifyOptions.channel.id)
+          : null;
+      this.logger.warn("notification skipped", {
+        user: user && user.user_key ? user.user_key : "",
+        title: String(title || ""),
+        channelId
+      });
+    }
+    return sent;
+  }
+
+  async notifyCheckinResult(user, status, message, options = {}) {
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    let title = "签到通知";
+    if (normalizedStatus === "success") {
+      title = "签到成功";
+    } else if (normalizedStatus === "failed") {
+      title = "签到失败";
+    } else if (normalizedStatus === "exception") {
+      title = "签到异常";
+    }
+    return this.notifyUserText(
+      user,
+      title,
+      this.buildCheckinNotificationMessage(user, message, options),
+      options
+    );
   }
 
   async runUserCheckin(user, options = {}) {
@@ -415,13 +500,23 @@ class CheckinWorker {
           jitterRadiusM: simulated.jitterRadiusM,
           coordSystem: simulated.appliedCoordSystem || "wgs84"
         });
+        if (!effectiveDebugMode) {
+          await this.notifyCheckinResult(user, "success", finalMessage, {
+            trigger,
+            runDate
+          });
+        }
       } else {
         this.logger.warn("checkin failed", { user: user.user_key, message: result.message });
         if (!effectiveDebugMode) {
-          await this.notifyUserText(
+          await this.notifyCheckinResult(
             user,
-            "签到失败",
-            truncateText(result.message || "未知失败", 400)
+            "failed",
+            truncateText(result.message || "未知失败", 400),
+            {
+              trigger,
+              runDate
+            }
           );
           if (this.needsReauth(result.message)) {
             await this.notifyUserText(
@@ -487,7 +582,10 @@ class CheckinWorker {
       });
       this.logger.error("checkin exception", { user: user.user_key, error: baseErrorMessage });
       if (!effectiveDebugMode) {
-        await this.notifyUserText(user, "签到异常", baseErrorMessage);
+        await this.notifyCheckinResult(user, "exception", baseErrorMessage, {
+          trigger,
+          runDate
+        });
         if (this.needsReauth(baseErrorMessage)) {
           await this.notifyUserText(
             user,

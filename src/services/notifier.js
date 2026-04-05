@@ -391,31 +391,33 @@ class Notifier {
           message: safeMessage
         });
         if (!sent) {
-          return;
+          return false;
         }
-        return;
+        return true;
       }
       if (provider === "bark") {
         const sent = await this.sendViaBark(user, safeTitle, safeMessage, options);
         if (!sent) {
-          return;
+          return false;
         }
-        return;
+        return true;
       }
       if (provider === "serverchan") {
         const sent = await this.sendViaServerChan(user, safeTitle, safeMessage, options);
         if (!sent) {
-          return;
+          return false;
         }
-        return;
+        return true;
       }
       this.logger.warn("unsupported notifier provider", { provider });
+      return false;
     } catch (error) {
       this.logger.warn("sendText failed", {
         user: user && user.user_key ? user.user_key : "",
         provider,
         error: error.message
       });
+      return false;
     }
   }
 

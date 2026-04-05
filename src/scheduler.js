@@ -405,15 +405,28 @@ class CheckinScheduler {
         "csrf_missing"
       ].includes(statusCode);
       const reloginHint = needRelogin ? "；检测到登录态异常，请重新扫码登录。" : "";
-      const notifyChannel = this.repo.getEffectiveNotificationChannelByCheckinUserId(
-        latestUser.id
-      );
-      await this.notifier.sendText(
+      const notifyChannel =
+        this.worker && typeof this.worker.resolveNotificationChannelForUser === "function"
+          ? this.worker.resolveNotificationChannelForUser(latestUser)
+          : this.repo.getEffectiveNotificationChannelByCheckinUserId(latestUser.id);
+      const sent = await this.notifier.sendText(
         latestUser,
         "未签到警告",
         `账号 ${latestUser.display_name} 在 ${now.date} ${now.time} 检查状态为【${statusCode}】。${statusMsg}${reloginHint}`,
         notifyChannel ? { channel: notifyChannel } : {}
       );
+      if (!sent) {
+        this.logger.warn("watchdog alert notification skipped", {
+          user: latestUser.user_key,
+          date: now.date,
+          time: now.time,
+          status: statusCode,
+          channelId:
+            notifyChannel && Number.isFinite(Number(notifyChannel.id))
+              ? Number(notifyChannel.id)
+              : null
+        });
+      }
       this.logger.warn("watchdog alert", {
         user: latestUser.user_key,
         date: now.date,

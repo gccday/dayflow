@@ -54,6 +54,7 @@
   const editMappingList = $("editMappingList");
   const editNotifyChannelId = $("editNotifyChannelId");
   const editNotifyChannelHint = $("editNotifyChannelHint");
+  const editTargetUrl = $("editTargetUrl");
   const editAddressSource = $("editAddressSource");
   const editFingerprintDetails = $("editFingerprintDetails");
   const btnSaveRegistrationSettings = $("btnSaveRegistrationSettings");
@@ -1533,6 +1534,9 @@
         AUTO_CHECKIN_JITTER_HINT;
     }
     $("editDisplayName").value = String(user.displayName || "");
+    if (editTargetUrl) {
+      editTargetUrl.value = String(user.targetUrl || "");
+    }
     const timeLabel = String(parseCronToTimeLabel(user.cronExpr || "") || "");
     $("editCheckinTime").value = /^\d{2}:\d{2}$/.test(timeLabel) ? timeLabel : "08:00";
     $("editWarningTime").value = String(user.warningTime || "23:00");
