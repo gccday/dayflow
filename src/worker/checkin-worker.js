@@ -227,10 +227,11 @@ class CheckinWorker {
     if (boundChannel) {
       return boundChannel;
     }
-    const availableChannels = Array.isArray(this.repo.listNotificationChannelsByCheckinUserId(checkinUserId))
-      ? this.repo
-          .listNotificationChannelsByCheckinUserId(checkinUserId)
-          .filter((channel) => Number(channel && channel.enabled) === 1)
+    const mappedChannels = typeof this.repo.listNotificationChannelsByCheckinUserId === "function"
+      ? this.repo.listNotificationChannelsByCheckinUserId(checkinUserId)
+      : [];
+    const availableChannels = Array.isArray(mappedChannels)
+      ? mappedChannels.filter((channel) => Number(channel && channel.enabled) === 1)
       : [];
     if (availableChannels.length === 1) {
       const fallbackChannel = availableChannels[0];
@@ -240,6 +241,37 @@ class CheckinWorker {
         channelName: String(fallbackChannel.name || "")
       });
       return fallbackChannel;
+    }
+    if (availableChannels.length > 1) {
+      return null;
+    }
+
+    const mappings = typeof this.repo.listUserCheckinMapByCheckinUserId === "function"
+      ? this.repo.listUserCheckinMapByCheckinUserId(checkinUserId)
+      : [];
+    if (Array.isArray(mappings) && mappings.length > 0) {
+      return null;
+    }
+
+    const allChannels = typeof this.repo.listNotificationChannels === "function"
+      ? this.repo.listNotificationChannels()
+      : [];
+    const adminOwnedEnabledChannels = Array.isArray(allChannels)
+      ? allChannels.filter(
+          (channel) =>
+            Number(channel && channel.enabled) === 1 &&
+            String(channel && channel.username ? channel.username : "") ===
+              "__dailyflow_admin_channel_owner__"
+        )
+      : [];
+    if (adminOwnedEnabledChannels.length === 1) {
+      const adminFallbackChannel = adminOwnedEnabledChannels[0];
+      this.logger.info("notification fallback admin channel selected", {
+        user: user && user.user_key ? user.user_key : "",
+        channelId: Number(adminFallbackChannel.id || 0) || null,
+        channelName: String(adminFallbackChannel.name || "")
+      });
+      return adminFallbackChannel;
     }
     return null;
   }

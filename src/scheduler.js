@@ -426,6 +426,7 @@ class CheckinScheduler {
               ? Number(notifyChannel.id)
               : null
         });
+        continue;
       }
       this.logger.warn("watchdog alert", {
         user: latestUser.user_key,

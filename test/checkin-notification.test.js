@@ -109,3 +109,45 @@ test("runUserCheckin sends success notification through sole available enabled c
   assert.match(sentMessages[0].message, /账号：测试账号/);
   assert.match(sentMessages[0].message, /结果：接口提交成功/);
 });
+
+test("resolveNotificationChannelForUser falls back to sole enabled admin-owned channel for unmapped user", () => {
+  const worker = new CheckinWorker({
+    config: {
+      defaultTimezone: "Asia/Shanghai"
+    },
+    repo: {
+      getEffectiveNotificationChannelByCheckinUserId() {
+        return null;
+      },
+      listNotificationChannelsByCheckinUserId() {
+        return [];
+      },
+      listUserCheckinMapByCheckinUserId() {
+        return [];
+      },
+      listNotificationChannels() {
+        return [
+          {
+            id: 101,
+            name: "admin-default",
+            username: "__dailyflow_admin_channel_owner__",
+            enabled: 1
+          }
+        ];
+      }
+    },
+    notifier: {
+      async sendText() {
+        return true;
+      }
+    },
+    logger: createLogger()
+  });
+
+  const resolved = worker.resolveNotificationChannelForUser({
+    id: 88,
+    user_key: "user_0088"
+  });
+  assert.ok(resolved);
+  assert.equal(Number(resolved.id), 101);
+});
