@@ -1118,24 +1118,37 @@ class CheckinWorker {
   createSchemaCapture(page) {
     const capture = {
       events: [],
+      searchEvents: [],
       pendingTasks: [],
       dispose: null
     };
     const handler = (response) => {
       const url = String(response.url() || "");
-      if (!url.includes("/query/formdesign/getSchemaWithAllNavs.json")) {
+      if (url.includes("/query/formdesign/getSchemaWithAllNavs.json")) {
+        const task = this.parseSchemaCaptureResponse(response)
+          .then((event) => {
+            if (event) {
+              capture.events.push(event);
+            }
+          })
+          .catch(() => {
+            // ignore parse errors
+          });
+        capture.pendingTasks.push(task);
         return;
       }
-      const task = this.parseSchemaCaptureResponse(response)
-        .then((event) => {
-          if (event) {
-            capture.events.push(event);
-          }
-        })
-        .catch(() => {
-          // ignore parse errors
-        });
-      capture.pendingTasks.push(task);
+      if (url.includes("/v1/form/searchFormDatas.json")) {
+        const task = this.parseSearchCaptureResponse(response)
+          .then((event) => {
+            if (event) {
+              capture.searchEvents.push(event);
+            }
+          })
+          .catch(() => {
+            // ignore parse errors
+          });
+        capture.pendingTasks.push(task);
+      }
     };
     page.on("response", handler);
     capture.dispose = () => {
@@ -1169,12 +1182,133 @@ class CheckinWorker {
     return event;
   }
 
+  async parseSearchCaptureResponse(response) {
+    const request = response.request();
+    const rawUrl = String(response.url() || "");
+    const event = {
+      at: Date.now(),
+      url: rawUrl,
+      method: request ? String(request.method() || "") : "",
+      status: Number(response.status() || 0),
+      endpoint: "",
+      formUuid: "",
+      searchFieldJson: {},
+      rowCount: 0,
+      payload: null,
+      rawText: ""
+    };
+    try {
+      const parsed = new URL(rawUrl);
+      event.endpoint = `${parsed.origin}${parsed.pathname}`;
+      event.formUuid = String(parsed.searchParams.get("formUuid") || "").trim();
+      const rawSearch = String(parsed.searchParams.get("searchFieldJson") || "").trim();
+      if (rawSearch) {
+        try {
+          const decoded = JSON.parse(rawSearch);
+          event.searchFieldJson = decoded && typeof decoded === "object" ? decoded : {};
+        } catch (_error) {
+          event.searchFieldJson = {};
+        }
+      }
+    } catch (_error) {
+      event.endpoint = rawUrl.split("?")[0] || rawUrl;
+    }
+    try {
+      event.rawText = await response.text();
+    } catch (_error) {
+      event.rawText = "";
+    }
+    if (event.rawText) {
+      try {
+        event.payload = JSON.parse(event.rawText);
+      } catch (_error) {
+        event.payload = null;
+      }
+    }
+    event.rowCount = this.extractSearchRows(event.payload).length;
+    return event;
+  }
+
   async flushSchemaCapture(capture) {
     if (!capture || !Array.isArray(capture.pendingTasks) || capture.pendingTasks.length <= 0) {
       return;
     }
     const tasks = capture.pendingTasks.splice(0, capture.pendingTasks.length);
     await Promise.allSettled(tasks);
+  }
+
+  inferSearchFieldMapping(searchFieldJson) {
+    const source = searchFieldJson && typeof searchFieldJson === "object" ? searchFieldJson : {};
+    const entries = Object.entries(source);
+    let noField = "";
+    let nameField = "";
+    for (const [field, rawValue] of entries) {
+      const bucket = Array.isArray(rawValue) ? rawValue : [rawValue];
+      const sample = String(bucket[0] === undefined || bucket[0] === null ? "" : bucket[0]).trim();
+      if (!sample) {
+        continue;
+      }
+      if (!noField && /^\d{6,}$/.test(sample)) {
+        noField = String(field || "").trim();
+        continue;
+      }
+      if (!nameField) {
+        nameField = String(field || "").trim();
+      }
+    }
+    if (!noField && entries.length > 0) {
+      noField = String(entries[0][0] || "").trim();
+    }
+    if (!nameField) {
+      for (const [field] of entries) {
+        const candidate = String(field || "").trim();
+        if (candidate && candidate !== noField) {
+          nameField = candidate;
+          break;
+        }
+      }
+    }
+    return {
+      noField,
+      nameField
+    };
+  }
+
+  resolveProfileFromSearchCapture(capture) {
+    const events = capture && Array.isArray(capture.searchEvents) ? capture.searchEvents : [];
+    if (events.length <= 0) {
+      return {};
+    }
+    const sorted = events.slice().sort((a, b) => a.at - b.at);
+    let preferred = sorted[sorted.length - 1];
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      const item = sorted[i];
+      if (Number(item && item.status) === 200 && Number(item && item.rowCount) > 0) {
+        preferred = item;
+        break;
+      }
+    }
+    if (!preferred) {
+      return {};
+    }
+    const patch = {};
+    if (preferred.endpoint) {
+      patch.searchEndpoint = String(preferred.endpoint).trim();
+      if (/searchFormDatas\.json/i.test(patch.searchEndpoint)) {
+        patch.updateEndpoint = patch.searchEndpoint.replace(/searchFormDatas\.json(?:\?.*)?$/i, "updateFormData.json");
+      }
+    }
+    if (preferred.formUuid) {
+      patch.studentFormUuid = String(preferred.formUuid).trim();
+    }
+    const mapped = this.inferSearchFieldMapping(preferred.searchFieldJson);
+    if (mapped.noField) {
+      patch.searchStudentNoField = mapped.noField;
+    }
+    if (mapped.nameField) {
+      patch.searchStudentNameField = mapped.nameField;
+    }
+    return patch;
   }
 
   findInitMethodsSource(payload) {
@@ -1372,6 +1506,8 @@ class CheckinWorker {
     if (!profile.updateEndpoint && profile.appType) {
       profile.updateEndpoint = `/dingtalk/web/${profile.appType}/v1/form/updateFormData.json`;
     }
+    const inferredBySearch = this.resolveProfileFromSearchCapture(capture);
+    Object.assign(profile, this.mergeRollcallProfiles(profile, inferredBySearch));
     profile.searchEndpoint = this.resolveAbsoluteUrl(page.url(), profile.searchEndpoint);
     profile.updateEndpoint = this.resolveAbsoluteUrl(page.url(), profile.updateEndpoint);
     profile.csrfToken = String(csrfToken || "").trim();
@@ -1460,6 +1596,35 @@ class CheckinWorker {
       resolved.userName = String(user.display_name || "").trim();
     }
     return resolved;
+  }
+
+  buildAjaxRequestHeaders(refererUrl) {
+    const headers = {
+      Accept: "application/json, text/plain, */*",
+      "X-Requested-With": "XMLHttpRequest"
+    };
+    const referer = String(refererUrl || "").trim();
+    if (!referer || !/^https?:\/\//i.test(referer)) {
+      return headers;
+    }
+    headers.Referer = referer;
+    try {
+      headers.Origin = new URL(referer).origin;
+    } catch (_error) {
+      // ignore invalid referer URL
+    }
+    return headers;
+  }
+
+  shouldRetryUncertainApiResult(verdict, payload, rawText) {
+    if (verdict && verdict.ok) {
+      return false;
+    }
+    const message = String(verdict && verdict.message ? verdict.message : "");
+    if (/响应为空|无法确认/.test(message)) {
+      return true;
+    }
+    return !payload && !String(rawText || "").trim();
   }
 
   parseApiResult(payload, status, fallbackMessage = "", options = {}) {
@@ -1558,7 +1723,7 @@ class CheckinWorker {
     };
   }
 
-  async requestJsonViaPageGet(page, endpoint, params) {
+  async requestJsonViaPageGet(page, endpoint, params, headers = null) {
     const pageFetch = await page.evaluate(async (input) => {
       const query = new URLSearchParams();
       const entries = Object.entries(input && input.params && typeof input.params === "object" ? input.params : {});
@@ -1570,7 +1735,8 @@ class CheckinWorker {
       const url = `${rawEndpoint}${connector}${query.toString()}`;
       const response = await fetch(url, {
         method: "GET",
-        credentials: "include"
+        credentials: "include",
+        headers: input && input.headers && typeof input.headers === "object" ? input.headers : {}
       });
       const text = await response.text();
       let payload = null;
@@ -1586,7 +1752,48 @@ class CheckinWorker {
       };
     }, {
       endpoint,
-      params
+      params,
+      headers
+    });
+    return {
+      status: Number(pageFetch && pageFetch.status ? pageFetch.status : 0),
+      payload: pageFetch && pageFetch.payload ? pageFetch.payload : null,
+      rawText: truncateText(String(pageFetch && pageFetch.rawText ? pageFetch.rawText : ""), 120000)
+    };
+  }
+
+  async requestJsonViaPagePost(page, endpoint, params, headers = null) {
+    const pageFetch = await page.evaluate(async (input) => {
+      const body = new URLSearchParams();
+      const entries = Object.entries(input && input.params && typeof input.params === "object" ? input.params : {});
+      for (const [key, value] of entries) {
+        body.set(String(key), String(value === undefined || value === null ? "" : value));
+      }
+      const response = await fetch(String((input && input.endpoint) || ""), {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          ...(input && input.headers && typeof input.headers === "object" ? input.headers : {})
+        },
+        body: body.toString()
+      });
+      const text = await response.text();
+      let payload = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch (_error) {
+        payload = null;
+      }
+      return {
+        status: Number(response.status || 0),
+        payload,
+        rawText: text
+      };
+    }, {
+      endpoint,
+      params,
+      headers
     });
     return {
       status: Number(pageFetch && pageFetch.status ? pageFetch.status : 0),
@@ -1891,6 +2098,7 @@ class CheckinWorker {
 
     const attempts = [];
     const debugEnabled = Boolean(debugTrace && typeof debugTrace === "object");
+    const ajaxHeaders = this.buildAjaxRequestHeaders(page && typeof page.url === "function" ? page.url() : "");
     if (debugEnabled && !Array.isArray(debugTrace.searchRequests)) {
       debugTrace.searchRequests = [];
     }
@@ -1922,6 +2130,7 @@ class CheckinWorker {
           if (!usingPage) {
             const response = await context.request.get(profile.searchEndpoint, {
               params: requestParams,
+              headers: ajaxHeaders,
               timeout: this.config.navigationTimeoutMs,
               failOnStatusCode: false
             });
@@ -1940,7 +2149,8 @@ class CheckinWorker {
               const url = `${endpoint}${connector}${query.toString()}`;
               const response = await fetch(url, {
                 method: "GET",
-                credentials: "include"
+                credentials: "include",
+                headers: params.headers || {}
               });
               const text = await response.text();
               let jsonPayload = null;
@@ -1958,7 +2168,8 @@ class CheckinWorker {
               endpoint: profile.searchEndpoint,
               formUuid: requestParams.formUuid,
               searchFieldJson: requestParams.searchFieldJson,
-              csrfToken: requestParams._csrf_token
+              csrfToken: requestParams._csrf_token,
+              headers: ajaxHeaders
             });
             responseStatus = Number(pageFetch && pageFetch.status ? pageFetch.status : 0);
             payload = pageFetch && pageFetch.payload ? pageFetch.payload : null;
@@ -2333,10 +2544,11 @@ class CheckinWorker {
       useLatestVersion: "y",
       _csrf_token: csrfToken
     };
+    const ajaxHeaders = this.buildAjaxRequestHeaders(page && typeof page.url === "function" ? page.url() : profile.updateEndpoint);
     if (debugTrace) {
       debugTrace.submit = {
         request: {
-          method: "GET",
+          method: "POST (preferred), GET (fallback)",
           endpoint: profile.updateEndpoint,
           params: this.sanitizeRequestParamsForDebug(updateRequestParams)
         },
@@ -2352,77 +2564,136 @@ class CheckinWorker {
       ok: false,
       message: "提交签到请求未执行"
     };
-    let updateSource = "context";
-    try {
-      const updateResponse = await context.request.get(profile.updateEndpoint, {
-        params: updateRequestParams,
-        timeout: this.config.navigationTimeoutMs,
-        failOnStatusCode: false
-      });
-      const updateBody = await this.readResponseBody(updateResponse);
-      updateStatus = Number(updateResponse.status() || 0);
-      updateJson = updateBody.payload;
-      updateRawText = updateBody.rawText;
-      updateVerdict = this.parseApiResult(updateJson, updateStatus, "提交签到", {
-        strictEvidence: true,
-        rawText: updateRawText
-      });
+    let updateSource = "context_post";
+    const applySubmitOutcome = (outcome) => {
+      if (!outcome) {
+        return;
+      }
+      updateSource = String(outcome.source || updateSource);
+      updateStatus = Number(outcome.status || 0);
+      updateJson = outcome.payload || null;
+      updateRawText = String(outcome.rawText || "");
+      updateVerdict = outcome.verdict || {
+        ok: false,
+        message: "提交签到请求异常"
+      };
       submitAttempts.push({
-        source: "context",
+        source: updateSource,
         status: updateStatus,
         verdict: this.normalizeDebugValue(updateVerdict, 4000),
         payload: this.normalizeDebugValue(updateJson, 80000),
         rawText: this.normalizeDebugValue(updateRawText, 2000)
       });
-    } catch (error) {
-      updateVerdict = {
-        ok: false,
-        message: `提交签到请求异常: ${truncateText(String(error && error.message ? error.message : "unknown"), 160)}`
-      };
-      submitAttempts.push({
-        source: "context",
-        status: updateStatus,
-        verdict: this.normalizeDebugValue(updateVerdict, 4000),
-        payload: null,
-        rawText: ""
-      });
-    }
-
-    const needPageRetry = !updateVerdict.ok &&
-      (/响应为空|无法确认/.test(String(updateVerdict.message || "")) ||
-        (!updateJson && !String(updateRawText || "").trim()));
-    if (needPageRetry && page) {
+    };
+    const runContextSubmitAttempt = async (method) => {
+      const normalizedMethod = String(method || "POST").toUpperCase();
+      const source = `context_${normalizedMethod.toLowerCase()}`;
       try {
-        const pageBody = await this.requestJsonViaPageGet(page, profile.updateEndpoint, updateRequestParams);
-        const pageVerdict = this.parseApiResult(pageBody.payload, pageBody.status, "提交签到", {
+        const response = normalizedMethod === "POST"
+          ? await context.request.post(profile.updateEndpoint, {
+            form: updateRequestParams,
+            headers: {
+              ...ajaxHeaders,
+              "Content-Type": "application/x-www-form-urlencoded"
+            },
+            timeout: this.config.navigationTimeoutMs,
+            failOnStatusCode: false
+          })
+          : await context.request.get(profile.updateEndpoint, {
+            params: updateRequestParams,
+            headers: ajaxHeaders,
+            timeout: this.config.navigationTimeoutMs,
+            failOnStatusCode: false
+          });
+        const body = await this.readResponseBody(response);
+        const status = Number(response.status() || 0);
+        const verdict = this.parseApiResult(body.payload, status, "提交签到", {
+          strictEvidence: true,
+          rawText: body.rawText
+        });
+        return {
+          source,
+          status,
+          payload: body.payload,
+          rawText: body.rawText,
+          verdict
+        };
+      } catch (error) {
+        return {
+          source,
+          status: 0,
+          payload: null,
+          rawText: "",
+          verdict: {
+            ok: false,
+            message: `提交签到请求异常: ${truncateText(String(error && error.message ? error.message : "unknown"), 160)}`
+          }
+        };
+      }
+    };
+    const runPageSubmitAttempt = async (method) => {
+      const normalizedMethod = String(method || "POST").toUpperCase();
+      const source = `page_${normalizedMethod.toLowerCase()}`;
+      try {
+        const pageBody = normalizedMethod === "POST"
+          ? await this.requestJsonViaPagePost(page, profile.updateEndpoint, updateRequestParams, ajaxHeaders)
+          : await this.requestJsonViaPageGet(page, profile.updateEndpoint, updateRequestParams, ajaxHeaders);
+        const verdict = this.parseApiResult(pageBody.payload, pageBody.status, "提交签到", {
           strictEvidence: true,
           rawText: pageBody.rawText
         });
-        submitAttempts.push({
-          source: "page",
-          status: pageBody.status,
-          verdict: this.normalizeDebugValue(pageVerdict, 4000),
-          payload: this.normalizeDebugValue(pageBody.payload, 80000),
-          rawText: this.normalizeDebugValue(pageBody.rawText, 2000)
-        });
-        updateSource = "page";
-        updateStatus = Number(pageBody.status || 0);
-        updateJson = pageBody.payload;
-        updateRawText = pageBody.rawText;
-        updateVerdict = pageVerdict;
+        return {
+          source,
+          status: Number(pageBody.status || 0),
+          payload: pageBody.payload,
+          rawText: pageBody.rawText,
+          verdict
+        };
       } catch (error) {
-        submitAttempts.push({
-          source: "page",
+        return {
+          source,
           status: 0,
+          payload: null,
+          rawText: "",
           verdict: {
             ok: false,
             message: `页面提交重试异常: ${truncateText(String(error && error.message ? error.message : "unknown"), 160)}`
-          },
-          payload: null,
-          rawText: ""
-        });
+          }
+        };
       }
-    }
+    };
+    const syncSubmitDebugState = () => {
+      if (debugTrace && debugTrace.submit) {
+        debugTrace.submit.response = {
+          source: updateSource,
+          status: Number(updateStatus || 0),
+          payload: this.normalizeDebugValue(updateJson, 80000),
+          rawText: this.normalizeDebugValue(updateRawText, 2000),
+          verdict: this.normalizeDebugValue(updateVerdict, 4000),
+          attempts: this.normalizeDebugValue(submitAttempts, 120000)
+        };
+      }
+    };
+    const runSubmitAttemptChain = async () => {
+      applySubmitOutcome(await runContextSubmitAttempt("POST"));
+      if (this.shouldRetryUncertainApiResult(updateVerdict, updateJson, updateRawText)) {
+        applySubmitOutcome(await runContextSubmitAttempt("GET"));
+      }
+      if (this.shouldRetryUncertainApiResult(updateVerdict, updateJson, updateRawText) && page) {
+        applySubmitOutcome(await runPageSubmitAttempt("POST"));
+      }
+      if (this.shouldRetryUncertainApiResult(updateVerdict, updateJson, updateRawText) && page) {
+        applySubmitOutcome(await runPageSubmitAttempt("GET"));
+      }
+      syncSubmitDebugState();
+    };
+    const refreshUpdatePayloadWithNow = () => {
+      updateData[profile.updateTimestampField] = Date.now();
+      updateRequestParams.updateFormDataJson = JSON.stringify(updateData);
+    };
+
+    refreshUpdatePayloadWithNow();
+    await runSubmitAttemptChain();
     const submitSummary = {
       mode: ignoreCheckWindow ? "manual_force_submit" : "normal_submit",
       alreadySigned: {
@@ -2444,17 +2715,7 @@ class CheckinWorker {
         attempts: this.normalizeDebugValue(submitAttempts, 120000)
       }
     };
-    if (debugTrace && debugTrace.submit) {
-      debugTrace.submit.response = {
-        source: updateSource,
-        status: Number(updateStatus || 0),
-        payload: this.normalizeDebugValue(updateJson, 80000),
-        rawText: this.normalizeDebugValue(updateRawText, 2000),
-        verdict: this.normalizeDebugValue(updateVerdict, 4000),
-        attempts: this.normalizeDebugValue(submitAttempts, 120000)
-      };
-    }
-    const verifyResult = await this.verifySubmittedStudentRow({
+    let verifyResult = await this.verifySubmittedStudentRow({
       context,
       page,
       profile,
@@ -2464,7 +2725,7 @@ class CheckinWorker {
       expectedTimestamp: updateData[profile.updateTimestampField],
       previousTimestamp: existingCheckTimestamp
     });
-    const statusCheck = await this.inspectCurrentCheckinState({
+    let statusCheck = await this.inspectCurrentCheckinState({
       context,
       page,
       profile,
@@ -2473,20 +2734,79 @@ class CheckinWorker {
       formInstId,
       tz
     });
+    const firstVerifyResult = verifyResult;
+    const firstStatusCheck = statusCheck;
+    const submitRetryDelayMs = 20 * 1000;
+    let statusRetryTriggered = false;
+    if (!statusCheck.ok) {
+      statusRetryTriggered = true;
+      if (debugTrace) {
+        debugTrace.submitRetry = this.normalizeDebugValue({
+          triggered: true,
+          reason: "post_submit_status_not_signed",
+          waitMs: submitRetryDelayMs,
+          beforeStatusCheck: firstStatusCheck
+        }, 20000);
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, submitRetryDelayMs);
+      });
+      refreshUpdatePayloadWithNow();
+      await runSubmitAttemptChain();
+      verifyResult = await this.verifySubmittedStudentRow({
+        context,
+        page,
+        profile,
+        csrfToken,
+        identity,
+        formInstId,
+        expectedTimestamp: updateData[profile.updateTimestampField],
+        previousTimestamp: existingCheckTimestamp
+      });
+      statusCheck = await this.inspectCurrentCheckinState({
+        context,
+        page,
+        profile,
+        csrfToken,
+        identity,
+        formInstId,
+        tz
+      });
+      if (debugTrace) {
+        debugTrace.submitRetryResult = this.normalizeDebugValue({
+          verify: verifyResult,
+          statusCheck
+        }, 20000);
+      }
+    }
+    submitSummary.retry = this.normalizeDebugValue({
+      triggered: statusRetryTriggered,
+      delayMs: statusRetryTriggered ? submitRetryDelayMs : 0,
+      firstVerify: firstVerifyResult,
+      firstStatusCheck
+    }, 20000);
+    submitSummary.api = {
+      source: updateSource,
+      httpStatus: Number(updateStatus || 0),
+      verdict: String(updateVerdict.message || "").trim(),
+      success: Boolean(updateVerdict.ok),
+      attempts: this.normalizeDebugValue(submitAttempts, 120000)
+    };
     submitSummary.verify = this.normalizeDebugValue(verifyResult, 20000);
     submitSummary.statusCheck = this.normalizeDebugValue(statusCheck, 20000);
     if (debugTrace) {
       debugTrace.submitVerify = this.normalizeDebugValue(verifyResult, 20000);
       debugTrace.statusCheck = this.normalizeDebugValue(statusCheck, 20000);
     }
+    const retryOutcomeHint = statusRetryTriggered ? "（20秒后重试一次）" : "";
     if (verifyResult.ok && statusCheck.ok) {
       if (!updateVerdict.ok) {
         const manualResubmitHint =
           alreadySignedToday && ignoreAlreadySignedToday ? "，已忽略今日已签到限制" : "";
         const fallbackSuccessMessage =
           ignoreCheckWindow && !windowCheck.within
-            ? `手动签到提交成功（已忽略时间窗口 ${profile.checkStartHHmm}-${profile.checkEndHHmm}，当前 ${windowCheck.currentHHmm}${manualResubmitHint}；接口响应异常但回查确认成功）`
-            : `接口响应异常，但回查确认签到已更新${manualResubmitHint}`;
+            ? `手动签到提交成功（已忽略时间窗口 ${profile.checkStartHHmm}-${profile.checkEndHHmm}，当前 ${windowCheck.currentHHmm}${manualResubmitHint}；接口响应异常但回查确认成功）${retryOutcomeHint}`
+            : `接口响应异常，但回查确认签到已更新${manualResubmitHint}${retryOutcomeHint}`;
         return {
           status: "success",
           message: fallbackSuccessMessage,
@@ -2505,7 +2825,7 @@ class CheckinWorker {
         );
       return {
         status: "failed",
-        message: `${failPrefix}: ${updateVerdict.message}`,
+        message: `${failPrefix}: ${updateVerdict.message}${retryOutcomeHint}`,
         preview: truncateText(JSON.stringify(updateJson || {}), 240),
         submitSummary,
         debugTrace
@@ -2513,7 +2833,7 @@ class CheckinWorker {
     } else if (!statusCheck.ok) {
       return {
         status: "failed",
-        message: `提交后回查未确认签到成功: ${statusCheck.message || "未知原因"}`,
+        message: `提交后回查未确认签到成功: ${statusCheck.message || "未知原因"}${retryOutcomeHint}`,
         preview: truncateText(JSON.stringify(statusCheck || {}), 240),
         submitSummary,
         debugTrace
@@ -2521,18 +2841,18 @@ class CheckinWorker {
     } else {
       return {
         status: "failed",
-        message: "提交接口返回成功，但回查未确认签到字段更新",
+        message: `提交接口返回成功，但回查未确认签到字段更新${retryOutcomeHint}`,
         preview: truncateText(JSON.stringify(submitSummary.verify || {}), 240),
         submitSummary,
         debugTrace
       };
     }
     const successMessage = alreadySignedToday && ignoreAlreadySignedToday
-      ? `手动重提签到成功（已忽略今日已签到限制）: ${updateVerdict.message}`
+      ? `手动重提签到成功（已忽略今日已签到限制）: ${updateVerdict.message}${retryOutcomeHint}`
       : (
         ignoreCheckWindow && !windowCheck.within
-          ? `手动签到提交成功（已忽略时间窗口 ${profile.checkStartHHmm}-${profile.checkEndHHmm}，当前 ${windowCheck.currentHHmm}）`
-          : `接口提交成功: ${updateVerdict.message}`
+          ? `手动签到提交成功（已忽略时间窗口 ${profile.checkStartHHmm}-${profile.checkEndHHmm}，当前 ${windowCheck.currentHHmm}）${retryOutcomeHint}`
+          : `接口提交成功: ${updateVerdict.message}${retryOutcomeHint}`
       );
     return {
       status: "success",
