@@ -125,10 +125,35 @@ ensure_env_file() {
   chmod 600 ".env" || true
 }
 
+runtime_modules_healthy() {
+  node - <<'EOF' >/dev/null 2>&1
+try {
+  require("better-sqlite3");
+  require("argon2");
+  process.exit(0);
+} catch (_error) {
+  process.exit(1);
+}
+EOF
+}
+
 ensure_node_modules() {
+  local need_install="false"
   if [[ ! -d "node_modules" ]]; then
+    need_install="true"
+  elif ! runtime_modules_healthy; then
+    echo "[WARN] Existing node_modules are incompatible with the current Node.js runtime. Reinstalling dependencies..."
+    rm -rf node_modules
+    need_install="true"
+  fi
+
+  if [[ "$need_install" == "true" ]]; then
     echo "[INFO] Installing dependencies..."
-    npm install
+    if [[ -f "package-lock.json" ]]; then
+      npm ci
+    else
+      npm install
+    fi
   fi
 }
 
