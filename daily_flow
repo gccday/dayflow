@@ -220,6 +220,8 @@ prepare_app() {
 }
 
 render_service_file() {
+  local service_path="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}"
+  local service_home="${HOME:-/root}"
   cat >"$SERVICE_FILE" <<EOF
 [Unit]
 Description=DayFlow Service
@@ -229,6 +231,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$SCRIPT_DIR
+Environment=PATH=$service_path
+Environment=HOME=$service_home
 ExecStart=/usr/bin/env bash $SCRIPT_DIR/daily_flow --run-service
 Restart=always
 RestartSec=3
