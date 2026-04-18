@@ -2653,6 +2653,19 @@
     switchPanel("panel-qr");
     $("qrSessionId").textContent = session.id || "-";
     $("qrMessage").textContent = session.message || "";
+    const qrDelayHintEl = $("qrDelayHint");
+    if (qrDelayHintEl) {
+      if (status === "scanning") {
+        qrDelayHintEl.textContent =
+          "已扫码，请在手机上确认登录。确认后服务端状态刷新可能延迟 10-30 秒，请耐心等待。";
+      } else if (status === "success") {
+        qrDelayHintEl.textContent =
+          "登录成功后，页面与列表状态同步可能有短暂延迟（通常 10-30 秒）。";
+      } else {
+        qrDelayHintEl.textContent =
+          "提示：扫码并在手机确认后，服务端状态刷新可能延迟 10-30 秒，请耐心等待，不要频繁重复扫码。";
+      }
+    }
     $("qrStatus").textContent = qrSessionStatusLabel(session.status || "-");
     $("qrStatus").className =
       "pill " +

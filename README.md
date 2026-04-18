@@ -1,36 +1,65 @@
-# 项目名字
-DayFlow
-
-# 部署命令
 ```bash
-# Linux 快速安装（Ubuntu/Debian）
+# install (ubuntu/debian, root)
 apt-get update
-apt-get install -y git nodejs npm
+apt-get install -y git nodejs npm build-essential python3 make g++
 
-# 拉代码
+cd /root
 git clone https://github.com/gccday/dayflow.git
-cd dayflow
+cd /root/dayflow
 
-# 国内 npm 镜像
-export NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+node -v
+npm -v
+which node
+which npm
 
-# 安装依赖
-npm ci --registry="$NPM_CONFIG_REGISTRY"
-
-# 首次运行会自动生成 `.env`
-# 设置管理员密码（隐藏输入，自动写入 Argon2 哈希）
+npm ci
 bash ./daily_flow --set-admin-password
-
-# 安装并启动 systemd 服务
-# 脚本会等待健康检查和 Web 端口就绪后再返回成功
 bash ./daily_flow --install-service
+
+systemctl status dayflow.service --no-pager | sed -n '1,20p'
+curl -i http://127.0.0.1:21787
 ```
 
 ```bash
-# SSH 终端运维命令（进入你实际克隆的目录，例如 `~/dayflow`）
-cd /path/to/dayflow
+# update (keep local tracked changes)
+cd /root/dayflow
+git pull --ff-only
+npm ci
+bash ./daily_flow restart
+
+systemctl status dayflow.service --no-pager | sed -n '1,20p'
+curl -i http://127.0.0.1:21787
+```
+
+```bash
+# update (use remote as source of truth)
+cd /root/dayflow
+
+cp -a .env ".env.backup.$(date +%F-%H%M%S)" 2>/dev/null || true
+
+git fetch origin
+git reset --hard origin/main
+git clean -fd -e .env -e '.env.bak*' -e data/ -e .runtime/
+git stash clear
+
+npm ci
+bash ./daily_flow restart
+
+systemctl status dayflow.service --no-pager | sed -n '1,20p'
+curl -i http://127.0.0.1:21787
+```
+
+```bash
+# ops
+cd /root/dayflow
+
 bash ./daily_flow start
 bash ./daily_flow stop
+bash ./daily_flow restart
 bash ./daily_flow status
 bash ./daily_flow --set-admin-password
+
+journalctl -u dayflow.service -n 120 --no-pager
+journalctl -u dayflow.service -f
+tail -n 120 /root/dayflow/.runtime/daily_flow.log
 ```
